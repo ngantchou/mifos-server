@@ -45,7 +45,7 @@ import org.springframework.stereotype.Component;
 @AllArgsConstructor
 public class AccountNumberGenerator {
 
-    private static final int maxLength = 9;
+    private static final int maxLength = 7;
 
     private static final String ID = "id";
     private static final String ENTITY_TYPE = "entityType";
