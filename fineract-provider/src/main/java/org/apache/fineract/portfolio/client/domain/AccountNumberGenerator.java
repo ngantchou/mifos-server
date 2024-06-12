@@ -45,7 +45,7 @@ import org.springframework.stereotype.Component;
 @AllArgsConstructor
 public class AccountNumberGenerator {
 
-    private static final int maxLength = 7;
+    private static final int maxLength = 8;
 
     private static final String ID = "id";
     private static final String ENTITY_TYPE = "entityType";
@@ -55,6 +55,7 @@ public class AccountNumberGenerator {
     private static final String SAVINGS_PRODUCT_SHORT_NAME = "savingsProductShortName";
     private static final String SHARE_PRODUCT_SHORT_NAME = "sharesProductShortName";
     private static final String PREFIX_SHORT_NAME = "prefixShortName";
+    private static final String OFFICE_EXTERNAL_ID = "officeExternalId";
     private final ConfigurationReadPlatformService configurationReadPlatformService;
     private final ClientRepository clientRepository;
     private final LoanRepository loanRepository;
@@ -63,6 +64,7 @@ public class AccountNumberGenerator {
     public String generate(Client client, AccountNumberFormat accountNumberFormat) {
         Map<String, String> propertyMap = new HashMap<>();
         propertyMap.put(ID, client.getId().toString());
+        propertyMap.put(OFFICE_EXTERNAL_ID, client.getOffice().getExternalId().getValue());
         propertyMap.put(OFFICE_NAME, client.getOffice().getName());
         propertyMap.put(ENTITY_TYPE, "client");
         CodeValue clientType = client.clientType();
@@ -75,6 +77,7 @@ public class AccountNumberGenerator {
     public String generate(Loan loan, AccountNumberFormat accountNumberFormat) {
         Map<String, String> propertyMap = new HashMap<>();
         propertyMap.put(ID, loan.getId().toString());
+        propertyMap.put(OFFICE_EXTERNAL_ID, loan.getOffice().getExternalId().getValue());
         propertyMap.put(OFFICE_NAME, loan.getOffice().getName());
         propertyMap.put(LOAN_PRODUCT_SHORT_NAME, loan.loanProduct().getShortName());
         propertyMap.put(ENTITY_TYPE, "loan");
@@ -84,6 +87,7 @@ public class AccountNumberGenerator {
     public String generate(SavingsAccount savingsAccount, AccountNumberFormat accountNumberFormat) {
         Map<String, String> propertyMap = new HashMap<>();
         propertyMap.put(ID, savingsAccount.getId().toString());
+        propertyMap.put(OFFICE_EXTERNAL_ID, savingsAccount.office().getExternalId().getValue());
         propertyMap.put(OFFICE_NAME, savingsAccount.office().getName());
         propertyMap.put(SAVINGS_PRODUCT_SHORT_NAME, savingsAccount.savingsProduct().getShortName());
         propertyMap.put(ENTITY_TYPE, "savingsAccount");
@@ -93,6 +97,7 @@ public class AccountNumberGenerator {
     public String generate(ShareAccount shareaccount, AccountNumberFormat accountNumberFormat) {
         Map<String, String> propertyMap = new HashMap<>();
         propertyMap.put(ID, shareaccount.getId().toString());
+        //propertyMap.put(OFFICE_EXTERNAL_ID, shareaccount.getOffice().getExternalId().getValue());
         propertyMap.put(SHARE_PRODUCT_SHORT_NAME, shareaccount.getShareProduct().getShortName());
         return generateAccountNumber(propertyMap, accountNumberFormat);
     }
@@ -149,6 +154,11 @@ public class AccountNumberGenerator {
             // FINERACT-590
             // Because account_no is limited to 20 chars, we can only use the
             // first 10 chars of prefix - trim if necessary
+            // Inclusion de l'ID externe du bureau dans le préfixe
+            String officeExternalId = propertyMap.get(OFFICE_EXTERNAL_ID);
+            if (officeExternalId != null) {
+                prefix = prefix + " " + officeExternalId+" ";
+            }
             if (prefix != null) {
                 prefix = prefix.substring(0, Math.min(prefix.length(), 10));
             }
