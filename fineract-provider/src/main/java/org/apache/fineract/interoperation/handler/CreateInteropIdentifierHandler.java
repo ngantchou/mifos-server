@@ -50,6 +50,7 @@ public class CreateInteropIdentifierHandler implements NewCommandSourceHandler {
     public CommandProcessingResult processCommand(final JsonCommand command) {
         List<String> split = Splitter.on('/').splitToList(command.getUrl());
         int length = split.size();
+        @SuppressWarnings("deprecation")
         String subIdOrType = Strings.emptyToNull(StringUtils.trimWhitespace(split.get(length - 1)));
         String idValue = split.get(length - 2);
         InteropIdentifierType idType = InteropIdentifierType.valueOf(split.get(length - 3).toUpperCase());

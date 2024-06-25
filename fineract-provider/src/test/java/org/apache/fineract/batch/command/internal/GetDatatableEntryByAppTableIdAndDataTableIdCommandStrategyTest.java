@@ -70,7 +70,9 @@ public class GetDatatableEntryByAppTableIdAndDataTableIdCommandStrategyTest {
     public void testExecuteSuccessScenario(final String queryParameter, final int numberOfQueryParams) {
         final TestContext testContext = new TestContext();
 
+        @SuppressWarnings("deprecation")
         final Long loanId = RandomUtils.nextLong();
+        @SuppressWarnings("deprecation")
         final Long datatableId = RandomUtils.nextLong();
         final String datatableName = "dt_loan_xyz";
         final BatchRequest request = getBatchRequest(loanId, datatableId, queryParameter, datatableName);

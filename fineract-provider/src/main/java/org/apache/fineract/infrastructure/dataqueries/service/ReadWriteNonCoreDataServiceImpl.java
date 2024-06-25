@@ -963,6 +963,9 @@ public class ReadWriteNonCoreDataServiceImpl implements ReadWriteNonCoreDataServ
         }
         DatabaseType dialect = databaseTypeResolver.databaseType();
         ResultsetColumnHeaderData columnHeader = mapColumnNameDefinition.get(oldName);
+        if (columnHeader == null) {
+            throw new IllegalArgumentException("Column type cannot be null");
+        }
         final JdbcJavaType type = columnHeader.getColumnType();
         boolean nameChanged = !StringUtils.isBlank(newName) && !newName.equals(oldName);
         boolean lengthChanged = length != null && !length.equals(columnHeader.getColumnLength()) && type.hasPrecision(dialect);

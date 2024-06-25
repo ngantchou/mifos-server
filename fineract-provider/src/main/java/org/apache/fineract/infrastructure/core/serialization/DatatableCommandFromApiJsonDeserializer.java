@@ -172,6 +172,8 @@ public class DatatableCommandFromApiJsonDeserializer {
         if (StringUtils.isBlank(json)) {
             throw new InvalidJsonException();
         }
+        // final JsonElement element = this.fromApiJsonHelper.parse(json);
+        // System.out.println(element.toString());
         // Because all parameters are optional, a check to see if at least one
         // parameter
         // has been specified is necessary in order to avoid JSON requests with

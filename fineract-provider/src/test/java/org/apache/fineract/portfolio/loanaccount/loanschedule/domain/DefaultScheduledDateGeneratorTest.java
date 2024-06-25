@@ -126,6 +126,7 @@ public class DefaultScheduledDateGeneratorTest {
                 DISBURSEMENT_DATE, submittedOnDate, CUMULATIVE, LoanScheduleProcessingType.HORIZONTAL, null);
     }
 
+    @SuppressWarnings("unchecked")
     private HolidayDetailDTO createHolidayDTO() {
         WorkingDays workingDays = new WorkingDays("FREQ=WEEKLY;INTERVAL=1;BYDAY=MO,TU,WE,TH,FR,SA,SU", MOVE_TO_NEXT_WORKING_DAY.getValue(),
                 false, false);

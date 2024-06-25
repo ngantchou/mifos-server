@@ -92,6 +92,7 @@ public class COBBusinessStepServiceImpl implements COBBusinessStepService {
         return item;
     }
 
+    @SuppressWarnings("unchecked")
     @NotNull
     @Override
     public <T extends COBBusinessStep<S>, S extends AbstractPersistableCustom> Set<BusinessStepNameAndOrder> getCOBBusinessSteps(

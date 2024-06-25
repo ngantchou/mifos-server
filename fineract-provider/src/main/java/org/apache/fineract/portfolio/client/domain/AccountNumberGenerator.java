@@ -21,6 +21,8 @@ package org.apache.fineract.portfolio.client.domain;
 import java.math.BigInteger;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import lombok.AllArgsConstructor;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -48,6 +50,7 @@ public class AccountNumberGenerator {
     private static final int maxLength = 8;
 
     private static final String ID = "id";
+    private static final String KEY = "key";
     private static final String ENTITY_TYPE = "entityType";
     private static final String CLIENT_TYPE = "clientType";
     private static final String OFFICE_NAME = "officeName";
@@ -60,6 +63,8 @@ public class AccountNumberGenerator {
     private final ClientRepository clientRepository;
     private final LoanRepository loanRepository;
     private final SavingsAccountRepository savingsAccountRepository;
+    private final AtomicInteger sequentialKey = new AtomicInteger(1); // Atomic integer for generating sequential keys
+
 
     public String generate(Client client, AccountNumberFormat accountNumberFormat) {
         Map<String, String> propertyMap = new HashMap<>();
@@ -90,6 +95,7 @@ public class AccountNumberGenerator {
         propertyMap.put(OFFICE_EXTERNAL_ID, savingsAccount.office().getExternalId().getValue());
         propertyMap.put(OFFICE_NAME, savingsAccount.office().getName());
         propertyMap.put(SAVINGS_PRODUCT_SHORT_NAME, savingsAccount.savingsProduct().getShortName());
+        
         propertyMap.put(ENTITY_TYPE, "savingsAccount");
         return generateAccountNumber(propertyMap, accountNumberFormat);
     }
@@ -184,6 +190,10 @@ public class AccountNumberGenerator {
                 accountNumber = generateAccountNumber(propertyMap, accountNumberFormat);
             }
         }
+        // Append the sequential key at the end
+        String sequentialKeyString = String.format("%02d", sequentialKey.getAndIncrement());
+        accountNumber = accountNumber + " " + sequentialKeyString;
+
         return accountNumber;
     }
 

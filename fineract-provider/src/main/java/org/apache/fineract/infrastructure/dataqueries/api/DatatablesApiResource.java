@@ -134,7 +134,7 @@ public class DatatablesApiResource {
             @ApiResponse(responseCode = "200", description = "OK", content = @Content(schema = @Schema(implementation = DatatablesApiResourceSwagger.PutDataTablesResponse.class))) })
     public String updateDatatable(@PathParam("datatableName") @Parameter(description = "datatableName") final String datatableName,
             @Parameter(hidden = true) final String apiRequestBodyAsJson) {
-
+                System.out.println("Debugging: " + datatableName);
         final CommandWrapper commandRequest = new CommandWrapperBuilder().updateDBDatatable(datatableName, apiRequestBodyAsJson).build();
 
         final CommandProcessingResult result = this.commandsSourceWritePlatformService.logCommandSource(commandRequest);

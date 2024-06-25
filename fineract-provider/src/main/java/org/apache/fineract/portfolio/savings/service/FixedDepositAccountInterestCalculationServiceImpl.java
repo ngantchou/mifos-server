@@ -42,7 +42,8 @@ public class FixedDepositAccountInterestCalculationServiceImpl implements FixedD
     private final DepositAccountDataValidator depositAccountDataValidator;
     private final FromJsonHelper fromApiJsonHelper;
 
-    @Override
+    @SuppressWarnings("unchecked")
+@Override
     public HashMap calculateInterest(JsonQuery query) {
         depositAccountDataValidator.validateFixedDepositForInterestCalculation(query.json());
         JsonElement element = query.parsedJson();

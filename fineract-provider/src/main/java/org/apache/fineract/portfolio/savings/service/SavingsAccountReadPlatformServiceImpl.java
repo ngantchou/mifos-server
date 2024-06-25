@@ -1603,6 +1603,7 @@ public class SavingsAccountReadPlatformServiceImpl implements SavingsAccountRead
 
     }
 
+    @SuppressWarnings("deprecation")
     @Override
     public List<Long> retrieveSavingsIdsPendingInactive(LocalDate tenantLocalDate) {
         List<Long> ret = null;
@@ -1627,6 +1628,7 @@ public class SavingsAccountReadPlatformServiceImpl implements SavingsAccountRead
         return ret;
     }
 
+    @SuppressWarnings("deprecation")
     @Override
     public List<Long> retrieveSavingsIdsPendingDormant(LocalDate tenantLocalDate) {
         List<Long> ret = null;
