@@ -27,6 +27,7 @@ import org.apache.fineract.infrastructure.cache.domain.CacheType;
 import org.apache.fineract.infrastructure.cache.domain.PlatformCache;
 import org.apache.fineract.infrastructure.cache.domain.PlatformCacheRepository;
 import org.apache.fineract.infrastructure.configuration.data.GlobalConfigurationPropertyData;
+import org.apache.fineract.infrastructure.configuration.exception.GlobalConfigurationPropertyNotFoundException;
 import org.apache.fineract.useradministration.domain.Permission;
 import org.apache.fineract.useradministration.domain.PermissionRepository;
 import org.apache.fineract.useradministration.exception.PermissionNotFoundException;
@@ -389,12 +390,31 @@ public class ConfigurationDomainServiceJpa implements ConfigurationDomainService
 
     @NotNull
     private GlobalConfigurationPropertyData getGlobalConfigurationPropertyData(final String propertyName) {
-        return globalConfigurationRepository.findOneByNameWithNotFoundDetection(propertyName).toData();
+        if (propertyName == null || propertyName.isEmpty()) {
+            throw new IllegalArgumentException("Property name cannot be null or empty");
+        }
+        GlobalConfigurationProperty property = globalConfigurationRepository.findOneByNameWithNotFoundDetection(propertyName);
+        return property.toData();
     }
+    public boolean doesPropertyExist(String propertyName) {
+    try {
+        globalConfigurationRepository.findOneByNameWithNotFoundDetection(propertyName);
+        return true;
+    } catch (GlobalConfigurationPropertyNotFoundException e) {
+        return false;
+    }
+}
 
     @Override
     public boolean isSubRatesEnabled() {
-        return getGlobalConfigurationPropertyData("sub-rates").isEnabled();
+
+        try {
+            return getGlobalConfigurationPropertyData("sub-rates").isEnabled();
+        } catch (Exception e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+            return false;
+        }
     }
 
     @Override
