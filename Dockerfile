@@ -17,7 +17,7 @@
 #
 FROM openjdk:17-jdk-slim AS builder
 
-#RUN apt-get update -qq && apt-get install -y wget
+RUN apt-get update -qq && apt-get install -y wget
 
 COPY . fineract
 WORKDIR /fineract
