@@ -68,7 +68,11 @@ buildscript {
         npmRepository = 'https://npm.pkg.github.com'
     }
     repositories {
+        mavenCentral()
         maven { url 'https://plugins.gradle.org/m2/' }
+        maven { url 'https://repo.spring.io/libs-snapshot' }
+		maven { url 'https://repo.spring.io/libs-milestone' }
+		maven { url 'https://repo.spring.io/plugins-release' }
     }
 
     dependencies {
@@ -79,6 +83,14 @@ buildscript {
         classpath 'org.apache.commons:commons-lang3:3.14.0'
         classpath 'io.swagger.core.v3:swagger-jaxrs2-jakarta:2.2.19'
         classpath 'jakarta.servlet:jakarta.servlet-api:6.0.0'
+    }
+        configurations.classpath {
+        resolutionStrategy.eachDependency { DependencyResolveDetails details ->
+            if (details.requested.group == 'com.burgstaller' && details.requested.name == 'okhttp-digest' && details.requested.version == '1.10') {
+                details.useTarget "io.github.rburgst:${details.requested.name}:1.21"
+                details.because 'Dependency has moved'
+            }
+        }
     }
 }
 
@@ -119,6 +131,7 @@ gradle clean bootRun'''
 
 version = '0.0.0-SNAPSHOT'
 
+
 gitVersioning.apply {
     refs {
         considerTagsOnBranches = true
@@ -145,6 +158,9 @@ allprojects  {
 
     repositories {
         mavenCentral()
+		maven { url 'https://repo.spring.io/libs-snapshot' }
+		maven { url 'https://repo.spring.io/libs-milestone' }
+		maven { url 'https://repo.spring.io/plugins-release' }
     }
 
     apply plugin: 'com.adarshr.test-logger'
@@ -591,7 +607,6 @@ configure(project.fineractJavaProjects) {
         implementation ("ch.qos.logback:logback-classic") {
             exclude(module: "slf4j-api")
         }
-
         compileOnly 'org.projectlombok:lombok'
         annotationProcessor 'org.projectlombok:lombok'
 
