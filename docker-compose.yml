@@ -27,7 +27,7 @@ services:
 
   fineract:
     container_name: lfv-server
-    build: 
+    build:
       context: .
       dockerfile: ./Dockerfile
     ports:

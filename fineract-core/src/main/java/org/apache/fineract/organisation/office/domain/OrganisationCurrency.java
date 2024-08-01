@@ -27,8 +27,9 @@ import org.apache.fineract.organisation.monetary.domain.MonetaryCurrency;
 /**
  * Represents currencies allowed for this MFI/organisation.
  */
-@Entity
+//@Entity
 @Table(name = "m_organisation_currency")
+@Entity(name = "OfficeOrganisationCurrency")
 public class OrganisationCurrency extends AbstractPersistableCustom {
 
     @Column(name = "code", nullable = false, length = 3)

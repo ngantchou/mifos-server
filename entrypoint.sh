@@ -11,7 +11,7 @@ echo "Starting Fineract..."
 
 # Run the Fineract application using the Java command.
 # Adjust the classpath and main class as needed for your application.
-java -jar /app/fineract-provider.jar
+java -jar fineract-provider.jar
 
 # Optionally, you can handle signals here if you need to.
 # For example, you might trap termination signals to clean up resources.
