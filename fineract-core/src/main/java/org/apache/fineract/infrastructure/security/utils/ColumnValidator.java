@@ -108,7 +108,6 @@ public class ColumnValidator {
         }
     }
 
-    @SuppressWarnings("deprecation")
     private static Map<String, Set<String>> getTableColumnMap(String schema, Map<String, Set<String>> tableColumnAliasMap) {
         Map<String, Set<String>> tableColumnMap = new HashMap<>();
         schema = schema.substring(schema.indexOf("from"));

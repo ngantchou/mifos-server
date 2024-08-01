@@ -48,6 +48,8 @@ import org.apache.fineract.portfolio.loanaccount.loanschedule.data.LoanScheduleD
 import org.apache.fineract.portfolio.loanaccount.loanschedule.data.LoanScheduleModelDownPaymentPeriod;
 import org.apache.fineract.portfolio.loanaccount.loanschedule.data.LoanScheduleParams;
 import org.apache.fineract.portfolio.loanaccount.loanschedule.exception.MultiDisbursementOutstandingAmoutException;
+import org.apache.fineract.portfolio.loanproduct.calc.EMICalculationResult;
+import org.apache.fineract.portfolio.loanproduct.calc.EMICalculator;
 import org.apache.fineract.portfolio.loanproduct.domain.RepaymentStartDateType;
 
 public abstract class AbstractProgressiveLoanScheduleGenerator implements LoanScheduleGenerator {
@@ -83,6 +85,7 @@ public abstract class AbstractProgressiveLoanScheduleGenerator implements LoanSc
         List<LoanScheduleModelPeriod> periods = createNewLoanScheduleListWithDisbursementDetails(loanApplicationTerms, scheduleParams,
                 chargesDueAtTimeOfDisbursement);
 
+        EMICalculationResult emiCalculationResult = null;
         boolean isFirstRepayment = true;
 
         // charges which depends on total loan interest will be added to this
@@ -98,7 +101,6 @@ public abstract class AbstractProgressiveLoanScheduleGenerator implements LoanSc
             AdjustedDateDetailsDTO adjustedDateDetailsDTO = getScheduledDateGenerator()
                     .adjustRepaymentDate(scheduleParams.getActualRepaymentDate(), loanApplicationTerms, holidayDetailDTO);
             scheduleParams.setActualRepaymentDate(adjustedDateDetailsDTO.getChangedActualRepaymentDate());
-            isFirstRepayment = false;
             LocalDate scheduledDueDate = adjustedDateDetailsDTO.getChangedScheduleDate();
 
             // Loan Schedule Exceptions that need to be applied for Loan Account
@@ -110,15 +112,27 @@ public abstract class AbstractProgressiveLoanScheduleGenerator implements LoanSc
                     .addLoanTermInDays(Math.toIntExact(ChronoUnit.DAYS.between(scheduleParams.getPeriodStartDate(), scheduledDueDate)));
 
             ScheduleCurrentPeriodParams currentPeriodParams = new ScheduleCurrentPeriodParams(currency, BigDecimal.ZERO);
-
-            processDisbursements(loanApplicationTerms, chargesDueAtTimeOfDisbursement, scheduleParams, periods, scheduledDueDate);
+            final boolean hasAnyProcessedDisbursement = processDisbursements(loanApplicationTerms, chargesDueAtTimeOfDisbursement,
+                    scheduleParams, periods, scheduledDueDate);
+            if (isFirstRepayment || hasAnyProcessedDisbursement) {
+                final LocalDate startDate = isFirstRepayment ? loanApplicationTerms.getRepaymentStartDate()
+                        : scheduleParams.getPeriodStartDate();
+                List<PreGeneratedLoanSchedulePeriod> expectedRepaymentPeriods = getScheduledDateGenerator()
+                        .generateRepaymentPeriods(startDate, loanApplicationTerms, holidayDetailDTO);
+                emiCalculationResult = getEMICalculator().calculateEMIValueAndRateFactors(scheduleParams.getOutstandingBalanceAsPerRest(),
+                        loanApplicationTerms.toLoanProductRelatedDetail(), expectedRepaymentPeriods, scheduleParams.getPeriodNumber(),
+                        loanApplicationTerms.getNumberOfRepayments(), mc);
+            }
 
             // 5 determine principal,interest of repayment period
-            PrincipalInterest principalInterestForThisPeriod = calculatePrincipalInterestComponentsForPeriod(loanApplicationTerms,
-                    scheduleParams, mc);
+            PrincipalInterest principalInterestForThisPeriod = getEMICalculator().calculatePrincipalInterestComponentsForPeriod(
+                    emiCalculationResult, scheduleParams.getOutstandingBalanceAsPerRest(),
+                    loanApplicationTerms.getInstallmentAmountInMultiplesOf(), scheduleParams.getPeriodNumber(),
+                    loanApplicationTerms.getActualNoOfRepaymnets(), mc);
 
             // update cumulative fields for principal
             currentPeriodParams.setPrincipalForThisPeriod(principalInterestForThisPeriod.principal());
+            currentPeriodParams.setInterestForThisPeriod(principalInterestForThisPeriod.interest());
             updateOutstandingBalance(scheduleParams, currentPeriodParams);
 
             if (scheduleParams.getOutstandingBalance().isLessThanZero() || !isNextRepaymentAvailable) {
@@ -181,6 +195,7 @@ public abstract class AbstractProgressiveLoanScheduleGenerator implements LoanSc
             // }
             thereIsDisbursementBeforeOrOnLoanEndDate = scheduleParams.getDisburseDetailMap().entrySet().stream()
                     .anyMatch(d -> !d.getKey().isAfter(loanApplicationTerms.getLoanEndDate()));
+            isFirstRepayment = false;
         }
 
         // If the disbursement happened after maturity date
@@ -225,8 +240,7 @@ public abstract class AbstractProgressiveLoanScheduleGenerator implements LoanSc
 
     public abstract PaymentPeriodsInOneYearCalculator getPaymentPeriodsInOneYearCalculator();
 
-    public abstract PrincipalInterest calculatePrincipalInterestComponentsForPeriod(LoanApplicationTerms loanApplicationTerms,
-            LoanScheduleParams loanScheduleParams, MathContext mc);
+    protected abstract EMICalculator getEMICalculator();
 
     // Private, internal methods
     private BigDecimal deriveTotalChargesDueAtTimeOfDisbursement(final Set<LoanCharge> loanCharges) {
@@ -260,7 +274,6 @@ public abstract class AbstractProgressiveLoanScheduleGenerator implements LoanSc
                 loanScheduleParams.addOutstandingBalance(principalMoney);
                 loanScheduleParams.addOutstandingBalanceAsPerRest(principalMoney);
                 loanScheduleParams.addPrincipalToBeScheduled(principalMoney);
-                loanApplicationTerms.setPrincipal(loanApplicationTerms.getPrincipal().plus(principalMoney));
                 loanApplicationTerms.resetFixedEmiAmount();
                 if (loanApplicationTerms.isDownPaymentEnabled()) {
                     final LoanScheduleModelDownPaymentPeriod downPaymentPeriod = createDownPaymentPeriod(loanApplicationTerms,
@@ -318,9 +331,10 @@ public abstract class AbstractProgressiveLoanScheduleGenerator implements LoanSc
     /**
      * Method add extra disbursement periods (if applicable) and update the schedule params
      */
-    private void processDisbursements(final LoanApplicationTerms loanApplicationTerms, final BigDecimal chargesDueAtTimeOfDisbursement,
+    private boolean processDisbursements(final LoanApplicationTerms loanApplicationTerms, final BigDecimal chargesDueAtTimeOfDisbursement,
             LoanScheduleParams scheduleParams, final Collection<LoanScheduleModelPeriod> periods, final LocalDate scheduledDueDate) {
         Iterator<Map.Entry<LocalDate, Money>> iter = scheduleParams.getDisburseDetailMap().entrySet().iterator();
+        boolean hasProcessedDisbursement = false;
         while (iter.hasNext()) {
             Map.Entry<LocalDate, Money> disburseDetail = iter.next();
             if ((disburseDetail.getKey().isEqual(scheduleParams.getPeriodStartDate())
@@ -364,8 +378,10 @@ public abstract class AbstractProgressiveLoanScheduleGenerator implements LoanSc
                     }
                 }
                 iter.remove();
+                hasProcessedDisbursement = true;
             }
         }
+        return hasProcessedDisbursement;
     }
 
     private void applyChargesForCurrentPeriod(final Set<LoanCharge> loanCharges, final MonetaryCurrency currency,
