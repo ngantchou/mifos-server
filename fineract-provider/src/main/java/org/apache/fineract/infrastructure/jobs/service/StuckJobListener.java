@@ -32,8 +32,6 @@ import org.apache.fineract.infrastructure.event.external.service.JdbcTemplateFac
 import org.apache.fineract.infrastructure.jobs.domain.JobExecutionRepository;
 import org.apache.fineract.useradministration.domain.AppUser;
 import org.apache.fineract.useradministration.domain.AppUserRepositoryWrapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.batch.core.configuration.JobRegistry;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.ApplicationListener;
@@ -55,7 +53,7 @@ public class StuckJobListener implements ApplicationListener<ContextRefreshedEve
     private final BusinessDateReadPlatformService businessDateReadPlatformService;
     private final StuckJobExecutorService stuckJobExecutorService;
     private final AppUserRepositoryWrapper userRepository;
-    private static final Logger logger = LoggerFactory.getLogger(StuckJobListener.class);
+
     @Override
     public void onApplicationEvent(ContextRefreshedEvent event) {
         if (!jobRegistry.getJobNames().isEmpty()) {
@@ -63,45 +61,24 @@ public class StuckJobListener implements ApplicationListener<ContextRefreshedEve
             allTenants.forEach(tenant -> {
                 NamedParameterJdbcTemplate namedParameterJdbcTemplate = jdbcTemplateFactory.createNamedParameterJdbcTemplate(tenant);
                 List<String> stuckJobNames = jobExecutionRepository.getStuckJobNames(namedParameterJdbcTemplate);
-                if (stuckJobNames != null && !stuckJobNames.isEmpty()) {
+                if (!stuckJobNames.isEmpty()) {
                     try {
                         ThreadLocalContextUtil.setTenant(tenant);
                         HashMap<BusinessDateType, LocalDate> businessDates = businessDateReadPlatformService.getBusinessDates();
                         ThreadLocalContextUtil.setActionContext(ActionContext.DEFAULT);
                         ThreadLocalContextUtil.setBusinessDates(businessDates);
                         AppUser user = userRepository.fetchSystemUser();
-                        
-                        if (user != null && user.getPassword() != null) {
-                            UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(user, user.getPassword(), user.getAuthorities());
-                            SecurityContextHolder.getContext().setAuthentication(auth);
-                            
-                            stuckJobNames.forEach(stuckJobName -> {
-                                if (stuckJobName != null && !stuckJobName.isEmpty()) {
-                                    stuckJobExecutorService.resumeStuckJob(stuckJobName);
-                                } else {
-                                    // Log the null or empty stuck job name
-                                    logger.warn("Encountered null or empty stuck job name for tenant: {}", tenant.getId());
-                                }
-                            });
-                        } else {
-                            // Log if user or password is null
-                            logger.warn("System user or password is null for tenant: {}", tenant.getId());
-                        }
+                        UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(user, user.getPassword(),
+                                user.getAuthorities());
+                        SecurityContextHolder.getContext().setAuthentication(auth);
+                        stuckJobNames.forEach(stuckJobExecutorService::resumeStuckJob);
                     } catch (Exception e) {
-                        logger.error("Error while trying to restart stuck jobs for tenant: {}", tenant.getId(), e);
                         throw new RuntimeException("Error while trying to restart stuck jobs", e);
                     } finally {
                         ThreadLocalContextUtil.reset();
                     }
-                } else {
-                    // Log if no stuck job names are found
-                    logger.info("No stuck job names found for tenant: {}", tenant.getId());
                 }
             });
-        } else {
-            // Log if no job names are found in the job registry
-            logger.info("No job names found in the job registry");
         }
     }
-    
 }

@@ -72,16 +72,11 @@ public class BusinessDateReadPlatformServiceImpl implements BusinessDateReadPlat
         LocalDate tenantDate = DateUtils.getLocalDateOfTenant();
         businessDateMap.put(BusinessDateType.BUSINESS_DATE, tenantDate);
         businessDateMap.put(BusinessDateType.COB_DATE, tenantDate);
-        try {
-            if (configurationDomainService!= null || configurationDomainService.isBusinessDateEnabled()) {
-                final List<BusinessDateData> businessDateDataList = this.findAll();
-                for (BusinessDateData businessDateData : businessDateDataList) {
-                    businessDateMap.put(BusinessDateType.valueOf(businessDateData.getType()), businessDateData.getDate());
-                }
+        if (configurationDomainService.isBusinessDateEnabled()) {
+            final List<BusinessDateData> businessDateDataList = this.findAll();
+            for (BusinessDateData businessDateData : businessDateDataList) {
+                businessDateMap.put(BusinessDateType.valueOf(businessDateData.getType()), businessDateData.getDate());
             }
-        } catch (Exception e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
         }
         return businessDateMap;
     }

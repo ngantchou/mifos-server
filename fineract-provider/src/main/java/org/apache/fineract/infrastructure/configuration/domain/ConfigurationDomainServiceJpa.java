@@ -27,7 +27,6 @@ import org.apache.fineract.infrastructure.cache.domain.CacheType;
 import org.apache.fineract.infrastructure.cache.domain.PlatformCache;
 import org.apache.fineract.infrastructure.cache.domain.PlatformCacheRepository;
 import org.apache.fineract.infrastructure.configuration.data.GlobalConfigurationPropertyData;
-import org.apache.fineract.infrastructure.configuration.exception.GlobalConfigurationPropertyNotFoundException;
 import org.apache.fineract.useradministration.domain.Permission;
 import org.apache.fineract.useradministration.domain.PermissionRepository;
 import org.apache.fineract.useradministration.exception.PermissionNotFoundException;
@@ -285,7 +284,7 @@ public class ConfigurationDomainServiceJpa implements ConfigurationDomainService
     }
 
     @Override
-    public Long retreivePeroidInNumberOfDaysForSkipMeetingDate() {
+    public Long retreivePeriodInNumberOfDaysForSkipMeetingDate() {
         final String propertyName = "skip-repayment-on-first-day-of-month";
         final GlobalConfigurationPropertyData property = getGlobalConfigurationPropertyData(propertyName);
         return property.getValue();
@@ -390,31 +389,12 @@ public class ConfigurationDomainServiceJpa implements ConfigurationDomainService
 
     @NotNull
     private GlobalConfigurationPropertyData getGlobalConfigurationPropertyData(final String propertyName) {
-        if (propertyName == null || propertyName.isEmpty()) {
-            throw new IllegalArgumentException("Property name cannot be null or empty");
-        }
-        GlobalConfigurationProperty property = globalConfigurationRepository.findOneByNameWithNotFoundDetection(propertyName);
-        return property.toData();
+        return globalConfigurationRepository.findOneByNameWithNotFoundDetection(propertyName).toData();
     }
-    public boolean doesPropertyExist(String propertyName) {
-    try {
-        globalConfigurationRepository.findOneByNameWithNotFoundDetection(propertyName);
-        return true;
-    } catch (GlobalConfigurationPropertyNotFoundException e) {
-        return false;
-    }
-}
 
     @Override
     public boolean isSubRatesEnabled() {
-
-        try {
-            return getGlobalConfigurationPropertyData("sub-rates").isEnabled();
-        } catch (Exception e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
-            return false;
-        }
+        return getGlobalConfigurationPropertyData("sub-rates").isEnabled();
     }
 
     @Override

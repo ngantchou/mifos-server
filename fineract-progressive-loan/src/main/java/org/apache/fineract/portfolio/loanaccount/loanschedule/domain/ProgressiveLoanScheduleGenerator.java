@@ -18,11 +18,8 @@
  */
 package org.apache.fineract.portfolio.loanaccount.loanschedule.domain;
 
-import java.math.BigDecimal;
-import java.math.MathContext;
 import lombok.RequiredArgsConstructor;
-import org.apache.fineract.organisation.monetary.domain.Money;
-import org.apache.fineract.portfolio.loanaccount.loanschedule.data.LoanScheduleParams;
+import org.apache.fineract.portfolio.loanproduct.calc.EMICalculator;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -31,6 +28,7 @@ public class ProgressiveLoanScheduleGenerator extends AbstractProgressiveLoanSch
 
     private final ScheduledDateGenerator scheduledDateGenerator;
     private final PaymentPeriodsInOneYearCalculator paymentPeriodsInOneYearCalculator;
+    private final EMICalculator emiCalculator;
 
     @Override
     public ScheduledDateGenerator getScheduledDateGenerator() {
@@ -43,30 +41,7 @@ public class ProgressiveLoanScheduleGenerator extends AbstractProgressiveLoanSch
     }
 
     @Override
-    public PrincipalInterest calculatePrincipalInterestComponentsForPeriod(LoanApplicationTerms loanApplicationTerms,
-            LoanScheduleParams loanScheduleParams, MathContext mc) {
-        // TODO: handle interest calculation
-        int periodNumber = loanScheduleParams.getPeriodNumber();
-        BigDecimal fixedEMIAmount = loanApplicationTerms.getFixedEmiAmount();
-        Money calculatedPrincipal;
-        if (fixedEMIAmount == null) {
-            int noRemainingPeriod = loanApplicationTerms.getActualNoOfRepaymnets() - periodNumber + 1;
-            calculatedPrincipal = loanScheduleParams.getOutstandingBalance().dividedBy(noRemainingPeriod, mc.getRoundingMode());
-            if (loanApplicationTerms.getInstallmentAmountInMultiplesOf() != null) {
-                calculatedPrincipal = Money.roundToMultiplesOf(calculatedPrincipal,
-                        loanApplicationTerms.getInstallmentAmountInMultiplesOf());
-            }
-            loanApplicationTerms.setFixedEmiAmount(calculatedPrincipal.getAmount());
-        } else {
-            calculatedPrincipal = Money.of(loanApplicationTerms.getCurrency(), fixedEMIAmount);
-        }
-        // adjust if needed
-        if (periodNumber == loanApplicationTerms.getActualNoOfRepaymnets()) {
-            Money remainingAmount = loanScheduleParams.getOutstandingBalance().minus(calculatedPrincipal);
-            calculatedPrincipal = calculatedPrincipal.plus(remainingAmount);
-        }
-
-        return new PrincipalInterest(calculatedPrincipal, Money.zero(loanApplicationTerms.getCurrency()),
-                Money.zero(loanApplicationTerms.getCurrency()));
+    protected EMICalculator getEMICalculator() {
+        return emiCalculator;
     }
 }

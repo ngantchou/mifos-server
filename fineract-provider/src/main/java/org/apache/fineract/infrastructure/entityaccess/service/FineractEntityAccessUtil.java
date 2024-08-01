@@ -98,6 +98,7 @@ public class FineractEntityAccessUtil {
                 this.fineractEntityToEntityMappingRepository.save(newMap);
             }
         }
+
     }
 
     public String getSQLWhereClauseForProductIDsForUserOffice_ifGlobalConfigEnabled(FineractEntityType fineractEntityType) {
@@ -122,4 +123,5 @@ public class FineractEntityAccessUtil {
         }
         return inClause;
     }
+
 }

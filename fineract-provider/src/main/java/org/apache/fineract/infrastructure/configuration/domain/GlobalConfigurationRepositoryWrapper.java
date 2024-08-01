@@ -43,13 +43,10 @@ public class GlobalConfigurationRepositoryWrapper {
 
     @Cacheable(value = "configByName", key = "T(org.apache.fineract.infrastructure.core.service.ThreadLocalContextUtil).getTenant().getTenantIdentifier().concat(#propertyName)")
     public GlobalConfigurationProperty findOneByNameWithNotFoundDetection(final String propertyName) {
-        log.debug("Fetching property from repository: {}", propertyName);
         final GlobalConfigurationProperty property = this.repository.findOneByName(propertyName);
         if (property == null) {
-            log.warn("Property not found: {}", propertyName);
             throw new GlobalConfigurationPropertyNotFoundException(propertyName);
         }
-        log.debug("Property found: {}", propertyName);
         return property;
     }
 

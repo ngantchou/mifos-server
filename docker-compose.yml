@@ -26,10 +26,9 @@ services:
       service: mariadb
 
   fineract:
-    container_name: lfv-server
-    build: 
-      context: .
-      dockerfile: ./Dockerfile
+    extends:
+      file: ./config/docker/compose/fineract.yml
+      service: fineract
     ports:
       - "8443:8443"
     depends_on:

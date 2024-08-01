@@ -216,8 +216,7 @@ public class FixedDepositAccountsApiResource {
                 DepositsApiConstants.FIXED_DEPOSIT_ACCOUNT_RESPONSE_DATA_PARAMETERS);
     }
 
-    @SuppressWarnings("unchecked")
-@GET
+    @GET
     @Path("calculate-fd-interest")
     @Consumes({ MediaType.APPLICATION_JSON })
     @Produces({ MediaType.APPLICATION_JSON })

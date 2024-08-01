@@ -43,7 +43,6 @@ import org.springframework.transaction.PlatformTransactionManager;
 @EnableBatchProcessing
 public class ScheduledJobRunnerConfig {
 
-    @SuppressWarnings("removal")
     @Bean
     public PlatformTransactionManager transactionManager(ObjectProvider<TransactionManagerCustomizers> transactionManagerCustomizers,
             List<TransactionLifecycleCallback> callbacks) {
