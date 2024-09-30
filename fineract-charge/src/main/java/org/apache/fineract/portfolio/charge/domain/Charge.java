@@ -57,7 +57,7 @@ import org.apache.fineract.portfolio.tax.domain.TaxGroup;
 
 @Entity
 @Table(name = "m_charge", uniqueConstraints = { @UniqueConstraint(columnNames = { "name" }, name = "name") })
-public class Charge extends AbstractPersistableCustom {
+public class Charge extends AbstractPersistableCustom<Long> {
 
     @Column(name = "name", length = 100)
     private String name;
@@ -677,10 +677,14 @@ public class Charge extends AbstractPersistableCustom {
         }
 
         final CurrencyData currency = new CurrencyData(this.currencyCode, null, 0, 0, null, null);
-        return ChargeData.instance(getId(), this.name, this.amount, currency, chargeTimeType, chargeAppliesTo, chargeCalculationType,
-                chargePaymentMode, getFeeOnMonthDay(), this.feeInterval, this.penalty, this.active, this.enableFreeWithdrawal,
-                this.freeWithdrawalFrequency, this.restartFrequency, this.restartFrequencyEnum, this.enablePaymentType, paymentTypeData,
-                this.minCap, this.maxCap, feeFrequencyType, accountData, taxGroupData);
+        return ChargeData.builder().id(getId()).name(this.name).amount(this.amount).currency(currency).chargeTimeType(chargeTimeType)
+                .chargeAppliesTo(chargeAppliesTo).chargeCalculationType(chargeCalculationType).chargePaymentMode(chargePaymentMode)
+                .feeOnMonthDay(getFeeOnMonthDay()).feeInterval(this.feeInterval).penalty(this.penalty).active(this.active)
+                .freeWithdrawal(this.enableFreeWithdrawal).freeWithdrawalChargeFrequency(this.freeWithdrawalFrequency)
+                .restartFrequency(this.restartFrequency).restartFrequencyEnum(this.restartFrequencyEnum)
+                .isPaymentType(this.enablePaymentType).paymentTypeOptions(paymentTypeData).minCap(this.minCap).maxCap(this.maxCap)
+                .feeFrequency(feeFrequencyType).incomeOrLiabilityAccount(accountData).taxGroup(taxGroupData).build();
+
     }
 
     public Integer getChargePaymentMode() {

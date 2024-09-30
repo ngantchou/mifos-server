@@ -842,6 +842,15 @@ public class CommandWrapperBuilder {
         return this;
     }
 
+    public CommandWrapperBuilder loanInterestPaymentWaiverTransaction(final Long loanId) {
+        this.actionName = "INTERESTPAYMENTWAIVER";
+        this.entityName = "LOAN";
+        this.entityId = null;
+        this.loanId = loanId;
+        this.href = "/loans/" + loanId + "/transactions/template?command=interestpaymentwaiver";
+        return this;
+    }
+
     public CommandWrapperBuilder refundLoanCharge(final Long loanId) {
         this.actionName = "CHARGEREFUND";
         this.entityName = "LOAN";
@@ -2814,7 +2823,23 @@ public class CommandWrapperBuilder {
         this.href = "/tellers/" + tellerId + "/cashiers/" + cashierId + "/settle";
         return this;
     }
-
+    public CommandWrapperBuilder openCashierSession(Long tellerId, Long cashierId) {
+        this.actionName = "OPENCASHIERSESSION";
+        this.entityName = "CASHIER";
+        this.entityId = tellerId;
+        this.subentityId = cashierId;
+        this.href = "/tellers/" + tellerId + "/cashiers/" + cashierId + "/open";
+        return this;
+    }
+    
+    public CommandWrapperBuilder closeCashierSession(Long tellerId, Long cashierId) {
+        this.actionName = "CLOSECASHIERSESSION";
+        this.entityName = "CASHIER";
+        this.entityId = tellerId;
+        this.subentityId = cashierId;
+        this.href = "/tellers/" + tellerId + "/cashiers/" + cashierId + "/close";
+        return this;
+    }
     public CommandWrapperBuilder deleteRole(Long roleId) {
         this.actionName = "DELETE";
         this.entityName = "ROLE";

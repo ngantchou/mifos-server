@@ -84,7 +84,7 @@ import org.apache.fineract.portfolio.rate.domain.Rate;
 @Table(name = "m_product_loan", uniqueConstraints = { @UniqueConstraint(columnNames = { "name" }, name = "unq_name"),
         @UniqueConstraint(columnNames = { "external_id" }, name = "external_id_UNIQUE"),
         @UniqueConstraint(columnNames = { "short_name" }, name = "unq_short_name") })
-public class LoanProduct extends AbstractPersistableCustom {
+public class LoanProduct extends AbstractPersistableCustom<Long> {
 
     @ManyToOne
     @JoinColumn(name = "fund_id")
@@ -439,6 +439,18 @@ public class LoanProduct extends AbstractPersistableCustom {
 
         final Integer fixedLength = command.integerValueOfParameterNamed(LoanProductConstants.FIXED_LENGTH);
 
+        final boolean enableAccrualActivityPosting = command
+                .booleanPrimitiveValueOfParameterNamed(LoanProductConstants.ENABLE_ACCRUAL_ACTIVITY_POSTING);
+
+        List<LoanSupportedInterestRefundTypes> supportedInterestRefundTypes = new ArrayList<>();
+        if (command.parameterExists(LoanProductConstants.SUPPORTED_INTEREST_REFUND_TYPES)) {
+            JsonArray supportedTransactionsForInterestRefund = command
+                    .arrayOfParameterNamed(LoanProductConstants.SUPPORTED_INTEREST_REFUND_TYPES);
+            supportedTransactionsForInterestRefund.iterator().forEachRemaining(value -> {
+                supportedInterestRefundTypes.add(LoanSupportedInterestRefundTypes.valueOf(value.getAsString()));
+            });
+        }
+
         return new LoanProduct(fund, loanTransactionProcessingStrategy, loanProductPaymentAllocationRules, loanProductCreditAllocationRules,
                 name, shortName, description, currency, principal, minPrincipal, maxPrincipal, interestRatePerPeriod,
                 minInterestRatePerPeriod, maxInterestRatePerPeriod, interestFrequencyType, annualInterestRate, interestMethod,
@@ -457,7 +469,8 @@ public class LoanProduct extends AbstractPersistableCustom {
                 isEqualAmortization, productRates, fixedPrincipalPercentagePerInstallment, disallowExpectedDisbursements,
                 allowApprovedDisbursedAmountsOverApplied, overAppliedCalculationType, overAppliedNumber, dueDaysForRepaymentEvent,
                 overDueDaysForRepaymentEvent, enableDownPayment, disbursedAmountPercentageDownPayment, enableAutoRepaymentForDownPayment,
-                repaymentStartDateType, enableInstallmentLevelDelinquency, loanScheduleType, loanScheduleProcessingType, fixedLength);
+                repaymentStartDateType, enableInstallmentLevelDelinquency, loanScheduleType, loanScheduleProcessingType, fixedLength,
+                enableAccrualActivityPosting, supportedInterestRefundTypes);
 
     }
 
@@ -674,7 +687,8 @@ public class LoanProduct extends AbstractPersistableCustom {
             final boolean enableDownPayment, final BigDecimal disbursedAmountPercentageForDownPayment,
             final boolean enableAutoRepaymentForDownPayment, final RepaymentStartDateType repaymentStartDateType,
             final boolean enableInstallmentLevelDelinquency, final LoanScheduleType loanScheduleType,
-            final LoanScheduleProcessingType loanScheduleProcessingType, final Integer fixedLength) {
+            final LoanScheduleProcessingType loanScheduleProcessingType, final Integer fixedLength,
+            final boolean enableAccrualActivityPosting, final List<LoanSupportedInterestRefundTypes> supportedInterestRefundTypes) {
         this.fund = fund;
         this.transactionProcessingStrategyCode = transactionProcessingStrategyCode;
 
@@ -723,9 +737,8 @@ public class LoanProduct extends AbstractPersistableCustom {
                 recurringMoratoriumOnPrincipalPeriods, graceOnInterestPayment, graceOnInterestCharged, amortizationMethod,
                 inArrearsTolerance, graceOnArrearsAgeing, daysInMonthType.getValue(), daysInYearType.getValue(),
                 isInterestRecalculationEnabled, isEqualAmortization, enableDownPayment, disbursedAmountPercentageForDownPayment,
-                enableAutoRepaymentForDownPayment, loanScheduleType, loanScheduleProcessingType, fixedLength);
-
-        this.loanProductRelatedDetail.validateRepaymentPeriodWithGraceSettings();
+                enableAutoRepaymentForDownPayment, loanScheduleType, loanScheduleProcessingType, fixedLength, enableAccrualActivityPosting,
+                supportedInterestRefundTypes);
 
         this.loanProductMinMaxConstraints = new LoanProductMinMaxConstraints(defaultMinPrincipal, defaultMaxPrincipal,
                 defaultMinNominalInterestRatePerPeriod, defaultMaxNominalInterestRatePerPeriod, defaultMinNumberOfInstallments,
@@ -908,6 +921,13 @@ public class LoanProduct extends AbstractPersistableCustom {
             final boolean newValue = command.booleanPrimitiveValueOfParameterNamed(isLinkedToFloatingInterestRates);
             actualChanges.put(isLinkedToFloatingInterestRates, newValue);
             this.isLinkedToFloatingInterestRate = newValue;
+        }
+
+        if (command.isChangeInBooleanParameterNamed(LoanProductConstants.ENABLE_ACCRUAL_ACTIVITY_POSTING,
+                this.getLoanProductRelatedDetail().isEnableAccrualActivityPosting())) {
+            final boolean newValue = command.booleanPrimitiveValueOfParameterNamed(LoanProductConstants.ENABLE_ACCRUAL_ACTIVITY_POSTING);
+            actualChanges.put(LoanProductConstants.ENABLE_ACCRUAL_ACTIVITY_POSTING, newValue);
+            this.getLoanProductRelatedDetail().setEnableAccrualActivityPosting(newValue);
         }
 
         if (this.isLinkedToFloatingInterestRate) {
@@ -1298,21 +1318,21 @@ public class LoanProduct extends AbstractPersistableCustom {
                 this.loanProductRelatedDetail.isEnableDownPayment())) {
             final boolean newValue = command.booleanPrimitiveValueOfParameterNamed(LoanProductConstants.ENABLE_DOWN_PAYMENT);
             actualChanges.put(LoanProductConstants.ENABLE_DOWN_PAYMENT, newValue);
-            this.loanProductRelatedDetail.updateEnableDownPayment(newValue);
+            this.loanProductRelatedDetail.setEnableDownPayment(newValue);
         }
 
         if (command.isChangeInBigDecimalParameterNamed(LoanProductConstants.DISBURSED_AMOUNT_PERCENTAGE_DOWN_PAYMENT,
                 this.loanProductRelatedDetail.getDisbursedAmountPercentageForDownPayment())) {
             BigDecimal newValue = command.bigDecimalValueOfParameterNamed(LoanProductConstants.DISBURSED_AMOUNT_PERCENTAGE_DOWN_PAYMENT);
             actualChanges.put(LoanProductConstants.DISBURSED_AMOUNT_PERCENTAGE_DOWN_PAYMENT, newValue);
-            this.loanProductRelatedDetail.updateDisbursedAmountPercentageForDownPayment(newValue);
+            this.loanProductRelatedDetail.setDisbursedAmountPercentageForDownPayment(newValue);
         }
 
         if (command.isChangeInBooleanParameterNamed(LoanProductConstants.ENABLE_AUTO_REPAYMENT_DOWN_PAYMENT,
                 this.loanProductRelatedDetail.isEnableAutoRepaymentForDownPayment())) {
             final boolean newValue = command.booleanPrimitiveValueOfParameterNamed(LoanProductConstants.ENABLE_AUTO_REPAYMENT_DOWN_PAYMENT);
             actualChanges.put(LoanProductConstants.ENABLE_AUTO_REPAYMENT_DOWN_PAYMENT, newValue);
-            this.loanProductRelatedDetail.updateEnableAutoRepaymentForDownPayment(newValue);
+            this.loanProductRelatedDetail.setEnableAutoRepaymentForDownPayment(newValue);
         }
 
         if (command.isChangeInIntegerParameterNamed(LoanProductConstants.REPAYMENT_START_DATE_TYPE,

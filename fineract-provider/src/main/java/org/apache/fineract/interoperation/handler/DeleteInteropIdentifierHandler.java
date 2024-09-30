@@ -45,7 +45,6 @@ public class DeleteInteropIdentifierHandler implements NewCommandSourceHandler {
         this.interopService = interopService;
     }
 
-    @SuppressWarnings("deprecation")
     @Transactional
     @Override
     public CommandProcessingResult processCommand(final JsonCommand command) {

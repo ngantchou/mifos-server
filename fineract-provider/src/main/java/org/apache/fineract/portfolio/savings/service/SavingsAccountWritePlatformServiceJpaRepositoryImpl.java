@@ -71,13 +71,22 @@ import org.apache.fineract.infrastructure.event.business.domain.savings.SavingsA
 import org.apache.fineract.infrastructure.event.business.domain.savings.SavingsCloseBusinessEvent;
 import org.apache.fineract.infrastructure.event.business.domain.savings.SavingsPostInterestBusinessEvent;
 import org.apache.fineract.infrastructure.event.business.service.BusinessEventNotifierService;
+import org.apache.fineract.infrastructure.security.exception.NoAuthorizationException;
 import org.apache.fineract.infrastructure.security.service.PlatformSecurityContext;
 import org.apache.fineract.organisation.holiday.domain.HolidayRepositoryWrapper;
 import org.apache.fineract.organisation.monetary.domain.Money;
 import org.apache.fineract.organisation.monetary.domain.MoneyHelper;
 import org.apache.fineract.organisation.office.domain.Office;
+import org.apache.fineract.organisation.office.domain.OfficeRepositoryWrapper;
 import org.apache.fineract.organisation.staff.domain.Staff;
+import org.apache.fineract.organisation.staff.domain.StaffRepository;
 import org.apache.fineract.organisation.staff.domain.StaffRepositoryWrapper;
+import org.apache.fineract.organisation.teller.domain.Billetage;
+import org.apache.fineract.organisation.teller.domain.BilletageRepository;
+import org.apache.fineract.organisation.teller.domain.Cashier;
+import org.apache.fineract.organisation.teller.domain.CashierRepositoryWrapper;
+import org.apache.fineract.organisation.teller.domain.Teller;
+import org.apache.fineract.organisation.teller.domain.TellerRepositoryWrapper;
 import org.apache.fineract.organisation.workingdays.domain.WorkingDaysRepositoryWrapper;
 import org.apache.fineract.portfolio.account.PortfolioAccountType;
 import org.apache.fineract.portfolio.account.domain.AccountTransferStandingInstruction;
@@ -113,7 +122,6 @@ import org.apache.fineract.portfolio.savings.domain.SavingsAccount;
 import org.apache.fineract.portfolio.savings.domain.SavingsAccountAssembler;
 import org.apache.fineract.portfolio.savings.domain.SavingsAccountCharge;
 import org.apache.fineract.portfolio.savings.domain.SavingsAccountChargeRepositoryWrapper;
-import org.apache.fineract.portfolio.savings.domain.SavingsAccountDomainService;
 import org.apache.fineract.portfolio.savings.domain.SavingsAccountRepositoryWrapper;
 import org.apache.fineract.portfolio.savings.domain.SavingsAccountStatusType;
 import org.apache.fineract.portfolio.savings.domain.SavingsAccountTransaction;
@@ -166,6 +174,11 @@ public class SavingsAccountWritePlatformServiceJpaRepositoryImpl implements Savi
     private final GSIMRepositoy gsimRepository;
     private final SavingsAccountInterestPostingService savingsAccountInterestPostingService;
     private final ErrorHandler errorHandler;
+    private final BilletageRepository  billetageRepository;
+    private final TellerRepositoryWrapper tellerRepositoryWrapper;
+    private final OfficeRepositoryWrapper officeRepositoryWrapper;
+    private final CashierRepositoryWrapper cashierRepositoryWrapper;
+
 
     @Transactional
     @Override
@@ -209,7 +222,7 @@ public class SavingsAccountWritePlatformServiceJpaRepositoryImpl implements Savi
         final Map<String, Object> changes = account.activate(user, command);
 
         entityDatatableChecksWritePlatformService.runTheCheckForProduct(savingsId, EntityTables.SAVINGS.getName(),
-                StatusEnum.ACTIVATE.getCode().longValue(), EntityTables.SAVINGS.getForeignKeyColumnNameOnDatatable(), account.productId());
+                StatusEnum.ACTIVATE.getValue(), EntityTables.SAVINGS.getForeignKeyColumnNameOnDatatable(), account.productId());
 
         if (!changes.isEmpty()) {
             final Locale locale = command.extractLocale();
@@ -277,8 +290,8 @@ public class SavingsAccountWritePlatformServiceJpaRepositoryImpl implements Savi
     @Transactional
     @Override
     public CommandProcessingResult deposit(final Long savingsId, final JsonCommand command) {
-        this.context.authenticatedUser();
-
+        final AppUser currentUser = this.context.authenticatedUser();
+        final Teller teller = validateUserPriviledgeOnTellerAndRetrieve(currentUser); 
         this.savingsAccountTransactionDataValidator.validate(command);
         boolean isGsim = false;
 
@@ -329,6 +342,14 @@ public class SavingsAccountWritePlatformServiceJpaRepositoryImpl implements Savi
             this.noteRepository.save(note);
         }
 
+        // Create and Save Billetage Entries
+        Collection<Billetage> billetages = Billetage.fromJson(command, teller, null, null, deposit.getRefNo());
+        // If a single billetage object or list is passed, save all entries
+        
+        if(billetages.size() > 0){
+            this.billetageRepository.saveAll(billetages);
+        }
+
         return new CommandProcessingResultBuilder() //
                 .withEntityId(deposit.getId()) //
                 .withOfficeId(account.officeId()) //
@@ -348,6 +369,9 @@ public class SavingsAccountWritePlatformServiceJpaRepositoryImpl implements Savi
     @Override
     public CommandProcessingResult withdrawal(final Long savingsId, final JsonCommand command) {
 
+        final AppUser currentUser = this.context.authenticatedUser();
+        final Teller teller = validateUserPriviledgeOnTellerAndRetrieve(currentUser); 
+        
         this.savingsAccountTransactionDataValidator.validate(command);
 
         boolean isGsim = false;
@@ -394,6 +418,12 @@ public class SavingsAccountWritePlatformServiceJpaRepositoryImpl implements Savi
         if (StringUtils.isNotBlank(noteText)) {
             final Note note = Note.savingsTransactionNote(account, withdrawal, noteText);
             this.noteRepository.save(note);
+        }
+        // Create and Save Billetage Entries
+        Collection<Billetage> billetages = Billetage.fromJson(command, teller, null, null, withdrawal.getRefNo());
+        // If a single billetage object or list is passed, save all entries
+        if(billetages.size() > 0){
+            this.billetageRepository.saveAll(billetages);
         }
 
         return new CommandProcessingResultBuilder() //
@@ -905,7 +935,7 @@ public class SavingsAccountWritePlatformServiceJpaRepositoryImpl implements Savi
         }
 
         entityDatatableChecksWritePlatformService.runTheCheckForProduct(savingsId, EntityTables.SAVINGS.getName(),
-                StatusEnum.CLOSE.getCode().longValue(), EntityTables.SAVINGS.getForeignKeyColumnNameOnDatatable(), account.productId());
+                StatusEnum.CLOSE.getValue(), EntityTables.SAVINGS.getForeignKeyColumnNameOnDatatable(), account.productId());
 
         final boolean isWithdrawBalance = command.booleanPrimitiveValueOfParameterNamed(withdrawBalanceParamName);
 
@@ -1375,7 +1405,7 @@ public class SavingsAccountWritePlatformServiceJpaRepositoryImpl implements Savi
             boolean backdatedTxnsAllowedTill, Throwable t) {
         // NOTE: allow caller to catch the exceptions
         // NOTE: wrap throwable only if really necessary
-        throw ErrorHandler.getMappable(t, null, null, "savings.postinterest");
+        throw errorHandler.getMappable(t, null, null, "savings.postinterest");
     }
 
     @Transactional
@@ -1908,5 +1938,16 @@ public class SavingsAccountWritePlatformServiceJpaRepositoryImpl implements Savi
         if (StringUtils.isBlank(reasonForBlock)) {
             throw new PlatformDataIntegrityException("Reason For Block is Mandatory", "error.msg.reason.for.block.mandatory");
         }
+    }
+    private Teller validateUserPriviledgeOnTellerAndRetrieve(final AppUser currentUser) {
+
+        final Long userOfficeId = currentUser.getOffice().getId();
+        final Office userOffice = this.officeRepositoryWrapper.findOfficeHierarchy(userOfficeId);
+        final Cashier cashierToReturn = this.cashierRepositoryWrapper.findOneByStaffIdWithNotFoundDetection(currentUser.getStaffId());
+        final Teller tellerToReturn = cashierToReturn.getTeller();
+        if (userOffice.doesNotHaveAnOfficeInHierarchyWithId(tellerToReturn.officeId())) {
+            throw new NoAuthorizationException("User does not have sufficient priviledges to act on the provided office.");
+        }
+        return tellerToReturn;
     }
 }

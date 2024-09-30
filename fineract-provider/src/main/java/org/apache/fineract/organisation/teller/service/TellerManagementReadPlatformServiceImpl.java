@@ -22,12 +22,17 @@ import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.Iterator;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.fineract.infrastructure.core.api.JsonCommand;
+import org.apache.fineract.infrastructure.core.data.CommandProcessingResult;
+import org.apache.fineract.infrastructure.core.data.CommandProcessingResultBuilder;
 import org.apache.fineract.infrastructure.core.domain.JdbcSupport;
+import org.apache.fineract.infrastructure.core.exception.PlatformDataIntegrityException;
 import org.apache.fineract.infrastructure.core.exception.UnrecognizedQueryParamException;
 import org.apache.fineract.infrastructure.core.service.Page;
 import org.apache.fineract.infrastructure.core.service.PaginationHelper;
@@ -49,16 +54,21 @@ import org.apache.fineract.organisation.teller.data.CashierTransactionsWithSumma
 import org.apache.fineract.organisation.teller.data.TellerData;
 import org.apache.fineract.organisation.teller.data.TellerJournalData;
 import org.apache.fineract.organisation.teller.data.TellerTransactionData;
+import org.apache.fineract.organisation.teller.domain.Cashier;
+import org.apache.fineract.organisation.teller.domain.CashierRepository;
+import org.apache.fineract.organisation.teller.domain.CashierSession;
+import org.apache.fineract.organisation.teller.domain.CashierSessionRepository;
 import org.apache.fineract.organisation.teller.domain.CashierTxnType;
+import org.apache.fineract.organisation.teller.domain.TellerRepositoryWrapper;
 import org.apache.fineract.organisation.teller.domain.TellerStatus;
+import org.apache.fineract.organisation.teller.exception.TellerNotFoundException;
+import org.apache.fineract.organisation.teller.exception.CashierNotFoundException;
 import org.apache.fineract.useradministration.domain.AppUser;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.util.CollectionUtils;
-import org.apache.fineract.organisation.teller.exception.CashierNotFoundException;
-import org.apache.fineract.organisation.teller.exception.TellerNotFoundException;
 
 @RequiredArgsConstructor
 public class TellerManagementReadPlatformServiceImpl implements TellerManagementReadPlatformService {
@@ -72,6 +82,9 @@ public class TellerManagementReadPlatformServiceImpl implements TellerManagement
     private final DatabaseSpecificSQLGenerator sqlGenerator;
     private final PaginationHelper paginationHelper;
     private final ColumnValidator columnValidator;
+    private final CashierRepository cashierRepository;
+    private final TellerRepositoryWrapper tellerRepositoryWrapper;
+    private final CashierSessionRepository cashierSessionRepository;
 
     private static final class TellerMapper implements RowMapper<TellerData> {
 
@@ -85,6 +98,22 @@ public class TellerManagementReadPlatformServiceImpl implements TellerManagement
             sqlBuilder.append("from m_tellers t ");
             sqlBuilder.append("join m_office o on o.id = t.office_id ");
 
+            return sqlBuilder.toString();
+        }
+        public String schemaTeller() {
+
+            final StringBuilder sqlBuilder = new StringBuilder(400);
+    
+            sqlBuilder.append("t.id as id, t.office_id as office_id, t.name as teller_name, t.description as description, ");
+            sqlBuilder.append("t.valid_from as start_date, t.valid_to as end_date, t.state as status, o.name as office_name, ");
+            sqlBuilder.append("t.debit_account_id as debit_account_id, t.credit_account_id as credit_account_id, ");
+            sqlBuilder.append("cs.status as last_session_status ");
+            sqlBuilder.append("from m_tellers t ");
+            sqlBuilder.append("join m_office o on o.id = t.office_id ");
+            sqlBuilder.append("left join m_cashiers c on c.teller_id = t.id ");
+            sqlBuilder.append("left join m_cashier_sessions cs on cs.cashier_id = c.id ");
+            sqlBuilder.append("and cs.id = (select max(id) from m_cashier_sessions where cashier_id = c.id) ");
+    
             return sqlBuilder.toString();
         }
 
@@ -451,6 +480,67 @@ public class TellerManagementReadPlatformServiceImpl implements TellerManagement
                 cashierTxnTemplate.getTellerName(), cashierTxnTemplate.getCashierId(), cashierTxnTemplate.getCashierName());
         return txnsWithSummary;
     }
+    
+    @Override
+    public CashierTransactionsWithSummaryData retrieveCashierTransactionsWithSummaryForDateRange(final Long cashierId, final boolean includeAllTellers,
+            final LocalDate fromDate, final LocalDate toDate, final String currencyCode, final SearchParameters searchParameters) {
+        CashierData cashierData = findCashier(cashierId);
+        Long staffId = cashierData.getStaffId();
+        StaffData staffData = staffReadPlatformService.retrieveStaff(staffId);
+        OfficeData officeData = officeReadPlatformService.retrieveOffice(staffData.getOfficeId());
+        final String hierarchy = officeData.getHierarchy();
+        String hierarchySearchString;
+        if (includeAllTellers) {
+            hierarchySearchString = "." + "%";
+        } else {
+            hierarchySearchString = hierarchy;
+        }
+        final CashierTransactionSummaryMapper ctsm = new CashierTransactionSummaryMapper();
+        final String sql = "select " + ctsm.cashierTxnSummaryForDateRangeSchema() + " limit 1000";
+        System.out.println(fromDate.toString()+" "+toDate.toString());
+        Collection<CashierTransactionTypeTotalsData> cashierTxnTypeTotals = this.jdbcTemplate.query(sql, ctsm, // NOSONAR
+        new Object[] { 
+            // Parameters for Cashier transactions
+            cashierId, currencyCode, hierarchySearchString, fromDate.toString(), toDate.toString(),
+            
+            // Parameters for Savings transactions
+            cashierId, currencyCode, hierarchySearchString, fromDate.toString(), toDate.toString(),
+            
+            // Parameters for Loan transactions
+            cashierId, currencyCode, hierarchySearchString, fromDate.toString(), toDate.toString()
+        });
+
+        Iterator<CashierTransactionTypeTotalsData> itr = cashierTxnTypeTotals.iterator();
+        BigDecimal allocAmount = new BigDecimal(0);
+        BigDecimal cashInAmount = new BigDecimal(0);
+        BigDecimal cashOutAmount = new BigDecimal(0);
+        BigDecimal settleAmount = new BigDecimal(0);
+
+        while (itr.hasNext()) {
+            CashierTransactionTypeTotalsData total = itr.next();
+            if (total != null) {
+                if (total.getCashierTxnType().equals(CashierTxnType.ALLOCATE.getId())) {
+                    allocAmount = total.getCashTotal();
+                } else if (total.getCashierTxnType().equals(CashierTxnType.SETTLE.getId())) {
+                    settleAmount = total.getCashTotal();
+                } else if (total.getCashierTxnType().equals(CashierTxnType.INWARD_CASH_TXN.getId())) {
+                    cashInAmount = total.getCashTotal();
+                } else if (total.getCashierTxnType().equals(CashierTxnType.OUTWARD_CASH_TXN.getId())) {
+                    cashOutAmount = total.getCashTotal();
+                }
+            }
+        }
+
+        final Page<CashierTransactionData> cashierTransactions = retrieveCashierTransactionsForDateRange(cashierId, includeAllTellers, fromDate, toDate,
+                currencyCode, searchParameters);
+
+        CashierTransactionData cashierTxnTemplate = retrieveCashierTxnTemplate(cashierId);
+
+        CashierTransactionsWithSummaryData txnsWithSummary = CashierTransactionsWithSummaryData.instance(cashierTransactions, allocAmount,
+                cashInAmount, cashOutAmount, settleAmount, cashierTxnTemplate.getOfficeName(), cashierTxnTemplate.getTellerId(),
+                cashierTxnTemplate.getTellerName(), cashierTxnTemplate.getCashierId(), cashierTxnTemplate.getCashierName());
+        return txnsWithSummary;
+    }
 
     @Override
     public Page<CashierTransactionData> retrieveCashierTransactions(final Long cashierId, final boolean includeAllTellers,
@@ -497,13 +587,56 @@ public class TellerManagementReadPlatformServiceImpl implements TellerManagement
                 sql += sqlGenerator.limit(searchParameters.getLimit());
             }
         }
-        // return this.jdbcTemplate.query(sql, ctm, new Object[] { cashierId,
-        // currencyCode, hierarchySearchString, cashierId, currencyCode,
-        // hierarchySearchString, cashierId, currencyCode,
-        // hierarchySearchString, cashierId, currencyCode, hierarchySearchString
-        // });
         Object[] params = new Object[] { cashierId, currencyCode, hierarchySearchString, cashierId, currencyCode, hierarchySearchString,
                 cashierId, currencyCode, hierarchySearchString, cashierId, currencyCode, hierarchySearchString };
+        return this.paginationHelper.fetchPage(this.jdbcTemplate, sql, params, ctm);
+    }
+    
+    @Override
+    public Page<CashierTransactionData> retrieveCashierTransactionsForDateRange(final Long cashierId, final boolean includeAllTellers,
+        final LocalDate fromDate, final LocalDate toDate, final String currencyCode, final SearchParameters searchParameters) {
+        CashierData cashierData = findCashier(cashierId);
+        Long staffId = cashierData.getStaffId();
+        StaffData staffData = staffReadPlatformService.retrieveStaff(staffId);
+        OfficeData officeData = officeReadPlatformService.retrieveOffice(staffData.getOfficeId());
+        final String hierarchy = officeData.getHierarchy();
+        String hierarchySearchString = includeAllTellers ? "." + "%" : hierarchy;
+
+        final CashierTransactionMapper ctm = new CashierTransactionMapper();
+
+        String sql = "select * from (select " + ctm.cashierTxnSchema()
+        + " where txn.cashier_id = ? and txn.currency_code = ? and o.hierarchy like ? "
+        + " AND (txn.txn_date between ? and ?) ) cashier_txns "
+        + " union (select " + ctm.savingsTxnSchema()
+        + " where sav_txn.is_reversed = false and c.id = ? and sav.currency_code = ? and o.hierarchy like ? and "
+        + " sav_txn.transaction_date between ? and ? "
+        + " and renum.enum_value in ('deposit','withdrawal fee', 'Pay Charge', 'withdrawal', 'Annual Fee', 'Waive Charge', 'Interest Posting', 'Overdraft Interest') "
+        + " and (sav_txn.payment_detail_id IS NULL OR payType.is_cash_payment = true) " + " AND acnttrans.id IS NULL ) "
+        + " union (select " + ctm.loansTxnSchema()
+        + " where loan_txn.is_reversed = false and c.id = ? and loan.currency_code = ? and o.hierarchy like ? and "
+        + " loan_txn.transaction_date between ? and ? "
+        + " and renum.enum_value in ('REPAYMENT_AT_DISBURSEMENT','REPAYMENT', 'RECOVERY_REPAYMENT','DISBURSEMENT', 'CHARGE_PAYMENT', 'WAIVE_CHARGES', 'WAIVE_INTEREST', 'WRITEOFF') "
+        + " and (loan_txn.payment_detail_id IS NULL OR payType.is_cash_payment = true) " + " AND acnttrans.id IS NULL ) "
+        + " union (select " + ctm.clientTxnSchema()
+        + " where cli_txn.is_reversed = false and c.id = ? and cli_txn.currency_code = ? and o.hierarchy like ? and cli_txn.transaction_date "
+        + " between ? and ? "
+        + " and renum.enum_value in ('PAY_CHARGE', 'WAIVE_CHARGE') "
+        + " and (cli_txn.payment_detail_id IS NULL OR payType.is_cash_payment = true) ) " + " order by created_date ";
+
+        if (searchParameters.hasLimit()) {
+            sql += " ";
+            if (searchParameters.hasOffset()) {
+                sql += sqlGenerator.limit(searchParameters.getLimit(), searchParameters.getOffset());
+            } else {
+                sql += sqlGenerator.limit(searchParameters.getLimit());
+            }
+        }
+        Object[] params = new Object[] { 
+            cashierId, currencyCode, hierarchySearchString, fromDate, toDate,
+            cashierId, currencyCode, hierarchySearchString, fromDate, toDate,
+            cashierId, currencyCode, hierarchySearchString, fromDate, toDate,
+            cashierId, currencyCode, hierarchySearchString, fromDate, toDate
+        };
         return this.paginationHelper.fetchPage(this.jdbcTemplate, sql, params, ctm);
     }
 
@@ -849,6 +982,193 @@ public class TellerManagementReadPlatformServiceImpl implements TellerManagement
             return sqlBuilder.toString();
         }
 
+        public String cashierDayTxnSummarySchema() {
+
+            final StringBuilder sqlBuilder = new StringBuilder(800);
+        
+            sqlBuilder.append(" cash_txn_type, sum(txn_amount) as txn_total from ");
+            sqlBuilder.append(" (select * from ");
+            
+            // Cashier transactions query
+            sqlBuilder.append(" (select txn.id as txn_id, txn.cashier_id as cashier_id, ");
+            sqlBuilder.append("    txn.txn_type as cash_txn_type, ");
+            sqlBuilder.append("    txn.txn_amount as txn_amount, txn.txn_date as txn_date, txn.txn_note as txn_note, ");
+            sqlBuilder.append("    txn.entity_type as entity_type, txn.entity_id as entity_id, txn.created_date as created_date, ");
+            sqlBuilder.append("    o.id as office_id, o.name as office_name, t.id as teller_id, t.name as teller_name, s.display_name as cashier_name ");
+            sqlBuilder.append("    from m_cashier_transactions txn ");
+            sqlBuilder.append("    left join m_cashiers c on c.id = txn.cashier_id ");
+            sqlBuilder.append("    left join m_tellers t on t.id = c.teller_id ");
+            sqlBuilder.append("    left join m_office o on o.id = t.office_id ");
+            sqlBuilder.append("    left join m_staff s on s.id = c.staff_id ");
+            sqlBuilder.append("    where txn.cashier_id = ? ");
+            sqlBuilder.append("    AND ((case when c.full_day then DATE(txn.created_date) between c.start_date AND c.end_date ");
+            sqlBuilder.append("    else (DATE(txn.created_date) between c.start_date AND c.end_date) ");
+            sqlBuilder.append("    and (TIME(txn.created_date) between TIME(c.start_time) AND TIME(c.end_time)) ");
+            sqlBuilder.append("    end) or txn.txn_type = 101) ");
+            sqlBuilder.append("    and txn.currency_code = ? ");
+            sqlBuilder.append("    and o.hierarchy like ? ");
+            
+            // Filter for current day
+            sqlBuilder.append("    and DATE(txn.txn_date) = CURDATE() ");
+            
+            sqlBuilder.append(" ) cashier_txns ");
+            sqlBuilder.append(" UNION ");
+            
+            // Savings transactions query
+            sqlBuilder.append(" (select sav_txn.id as txn_id, c.id as cashier_id, ");
+            sqlBuilder.append("    case ");
+            sqlBuilder.append("        when renum.enum_value in ('deposit','withdrawal fee', 'Pay Charge', 'Annual Fee') ");
+            sqlBuilder.append("            then 103 ");
+            sqlBuilder.append("        when renum.enum_value in ('withdrawal', 'Waive Charge', 'Interest Posting', 'Overdraft Interest') ");
+            sqlBuilder.append("            then 104 ");
+            sqlBuilder.append("        else 105 ");
+            sqlBuilder.append("    end as cash_txn_type, ");
+            sqlBuilder.append("    sav_txn.amount as txn_amount, sav_txn.transaction_date as txn_date, ");
+            sqlBuilder.append("    concat(renum.enum_value, ', Sav:', sav.id, '-', sav.account_no, ',Client:', cl.id, '-', cl.display_name) as txn_note, ");
+            sqlBuilder.append("    'savings' as entity_type, sav.id as entity_id, sav_txn.created_date as created_date, ");
+            sqlBuilder.append("    o.id as office_id, o.name as office_name, null as teller_id, null as teller_name, staff.display_name as cashier_name ");
+            sqlBuilder.append("    from m_savings_account_transaction sav_txn ");
+            sqlBuilder.append("    left join r_enum_value renum on sav_txn.transaction_type_enum = renum.enum_id and renum.enum_name = 'savings_transaction_type_enum' ");
+            sqlBuilder.append("    left join m_savings_account sav on sav_txn.savings_account_id = sav.id ");
+            sqlBuilder.append("    left join m_client cl on sav.client_id = cl.id ");
+            sqlBuilder.append("    left join m_office o on cl.office_id = o.id ");
+            sqlBuilder.append("    left join m_appuser user on sav_txn.created_by = user.id ");
+            sqlBuilder.append("    left join m_staff staff on user.staff_id = staff.id ");
+            sqlBuilder.append("    left join m_cashiers c on c.staff_id = staff.id ");
+            sqlBuilder.append("    left join m_payment_detail payDetails on payDetails.id = sav_txn.payment_detail_id ");
+            sqlBuilder.append("    left join m_payment_type payType on payType.id = payDetails.payment_type_id ");
+            sqlBuilder.append("    left join m_account_transfer_transaction acnttrans on (acnttrans.from_savings_transaction_id = sav_txn.id or acnttrans.to_savings_transaction_id = sav_txn.id) ");
+            sqlBuilder.append("    where sav_txn.is_reversed = false and c.id = ? ");
+            sqlBuilder.append("    and sav.currency_code = ? ");
+            sqlBuilder.append("    and o.hierarchy like ? ");
+            
+            // Filter for current day
+            sqlBuilder.append("    and DATE(sav_txn.transaction_date) = CURDATE() ");
+            sqlBuilder.append("    and (sav_txn.payment_detail_id IS NULL OR payType.is_cash_payment = true) ");
+            sqlBuilder.append("    AND acnttrans.id IS NULL ");
+            sqlBuilder.append(" ) ");
+            
+            sqlBuilder.append(" UNION ");
+            
+            // Loans transactions query
+            sqlBuilder.append(" (select ln_txn.id as txn_id, c.id as cashier_id, ");
+            sqlBuilder.append("    case ");
+            sqlBuilder.append("        when renum.enum_value in ('disbursement', 'penalty') ");
+            sqlBuilder.append("            then 103 ");
+            sqlBuilder.append("        when renum.enum_value in ('repayment', 'waive penalty', 'interest posting') ");
+            sqlBuilder.append("            then 104 ");
+            sqlBuilder.append("        else 105 ");
+            sqlBuilder.append("    end as cash_txn_type, ");
+            sqlBuilder.append("    ln_txn.amount as txn_amount, ln_txn.transaction_date as txn_date, ");
+            sqlBuilder.append("    concat(renum.enum_value, ', Loan:', loan.id, '-', loan.account_no, ',Client:', cl.id, '-', cl.display_name) as txn_note, ");
+            sqlBuilder.append("    'loan' as entity_type, loan.id as entity_id, ln_txn.created_date as created_date, ");
+            sqlBuilder.append("    o.id as office_id, o.name as office_name, null as teller_id, null as teller_name, staff.display_name as cashier_name ");
+            sqlBuilder.append("    from m_loan_transaction ln_txn ");
+            sqlBuilder.append("    left join r_enum_value renum on ln_txn.transaction_type_enum = renum.enum_id and renum.enum_name = 'loan_transaction_type_enum' ");
+            sqlBuilder.append("    left join m_loan loan on ln_txn.loan_id = loan.id ");
+            sqlBuilder.append("    left join m_client cl on loan.client_id = cl.id ");
+            sqlBuilder.append("    left join m_office o on cl.office_id = o.id ");
+            sqlBuilder.append("    left join m_appuser user on ln_txn.created_by = user.id ");
+            sqlBuilder.append("    left join m_staff staff on user.staff_id = staff.id ");
+            sqlBuilder.append("    left join m_cashiers c on c.staff_id = staff.id ");
+            sqlBuilder.append("    where ln_txn.is_reversed = false and c.id = ? ");
+            sqlBuilder.append("    and loan.currency_code = ? ");
+            sqlBuilder.append("    and o.hierarchy like ? ");
+            
+            // Filter for current day
+            sqlBuilder.append("    and DATE(ln_txn.transaction_date) = CURDATE() ");
+            sqlBuilder.append(" ) ");
+            
+            sqlBuilder.append(" ) as all_txns ");
+            sqlBuilder.append(" group by cash_txn_type ");
+        
+            return sqlBuilder.toString();
+        }
+        
+        public String cashierTxnSummaryForDateRangeSchema() {
+            final StringBuilder sqlBuilder = new StringBuilder(800);
+        
+            sqlBuilder.append(" cash_txn_type, SUM(txn_amount) as txn_total FROM (");
+            
+            // Cashier transactions query
+            sqlBuilder.append("SELECT txn.id as txn_id, txn.cashier_id, ");
+            sqlBuilder.append("    txn.txn_type as cash_txn_type, ");
+            sqlBuilder.append("    txn.txn_amount, txn.txn_date, txn.txn_note, ");
+            sqlBuilder.append("    txn.entity_type, txn.entity_id, txn.created_date, ");
+            sqlBuilder.append("    o.id as office_id, o.name as office_name, t.id as teller_id, t.name as teller_name, s.display_name as cashier_name ");
+            sqlBuilder.append("FROM m_cashier_transactions txn ");
+            sqlBuilder.append("LEFT JOIN m_cashiers c ON c.id = txn.cashier_id ");
+            sqlBuilder.append("LEFT JOIN m_tellers t ON t.id = c.teller_id ");
+            sqlBuilder.append("LEFT JOIN m_office o ON o.id = t.office_id ");
+            sqlBuilder.append("LEFT JOIN m_staff s ON s.id = c.staff_id ");
+            sqlBuilder.append("WHERE txn.cashier_id = ? ");
+            sqlBuilder.append("    AND txn.currency_code = ? ");
+            sqlBuilder.append("    AND o.hierarchy LIKE ? ");
+            sqlBuilder.append("    AND DATE(txn.txn_date) BETWEEN ? AND ? ");
+            
+            sqlBuilder.append("UNION ALL ");
+            
+            // Savings transactions query
+            sqlBuilder.append("SELECT sav_txn.id as txn_id, c.id as cashier_id, ");
+            sqlBuilder.append("    CASE ");
+            sqlBuilder.append("        WHEN renum.enum_value IN ('deposit','withdrawal fee', 'Pay Charge', 'Annual Fee') THEN 103 ");
+            sqlBuilder.append("        WHEN renum.enum_value IN ('withdrawal', 'Waive Charge', 'Interest Posting', 'Overdraft Interest') THEN 104 ");
+            sqlBuilder.append("        ELSE 105 ");
+            sqlBuilder.append("    END as cash_txn_type, ");
+            sqlBuilder.append("    sav_txn.amount as txn_amount, sav_txn.transaction_date as txn_date, ");
+            sqlBuilder.append("    CONCAT(renum.enum_value, ', Sav:', sav.id, '-', sav.account_no, ',Client:', cl.id, '-', cl.display_name) as txn_note, ");
+            sqlBuilder.append("    'savings' as entity_type, sav.id as entity_id, sav_txn.created_date, ");
+            sqlBuilder.append("    o.id as office_id, o.name as office_name, NULL as teller_id, NULL as teller_name, staff.display_name as cashier_name ");
+            sqlBuilder.append("FROM m_savings_account_transaction sav_txn ");
+            sqlBuilder.append("LEFT JOIN r_enum_value renum ON sav_txn.transaction_type_enum = renum.enum_id AND renum.enum_name = 'savings_transaction_type_enum' ");
+            sqlBuilder.append("LEFT JOIN m_savings_account sav ON sav_txn.savings_account_id = sav.id ");
+            sqlBuilder.append("LEFT JOIN m_client cl ON sav.client_id = cl.id ");
+            sqlBuilder.append("LEFT JOIN m_office o ON cl.office_id = o.id ");
+            sqlBuilder.append("LEFT JOIN m_appuser user ON sav_txn.created_by = user.id ");
+            sqlBuilder.append("LEFT JOIN m_staff staff ON user.staff_id = staff.id ");
+            sqlBuilder.append("LEFT JOIN m_cashiers c ON c.staff_id = staff.id ");
+            sqlBuilder.append("LEFT JOIN m_payment_detail payDetails ON payDetails.id = sav_txn.payment_detail_id ");
+            sqlBuilder.append("LEFT JOIN m_payment_type payType ON payType.id = payDetails.payment_type_id ");
+            sqlBuilder.append("LEFT JOIN m_account_transfer_transaction acnttrans ON (acnttrans.from_savings_transaction_id = sav_txn.id OR acnttrans.to_savings_transaction_id = sav_txn.id) ");
+            sqlBuilder.append("WHERE sav_txn.is_reversed = FALSE AND c.id = ? ");
+            sqlBuilder.append("    AND sav.currency_code = ? ");
+            sqlBuilder.append("    AND o.hierarchy LIKE ? ");
+            sqlBuilder.append("    AND DATE(sav_txn.transaction_date) BETWEEN ? AND ? ");
+            sqlBuilder.append("    AND (sav_txn.payment_detail_id IS NULL OR payType.is_cash_payment = TRUE) ");
+            sqlBuilder.append("    AND acnttrans.id IS NULL ");
+            
+            sqlBuilder.append("UNION ALL ");
+            
+            // Loans transactions query
+            sqlBuilder.append("SELECT ln_txn.id as txn_id, c.id as cashier_id, ");
+            sqlBuilder.append("    CASE ");
+            sqlBuilder.append("        WHEN renum.enum_value IN ('disbursement', 'penalty') THEN 103 ");
+            sqlBuilder.append("        WHEN renum.enum_value IN ('repayment', 'waive penalty', 'interest posting') THEN 104 ");
+            sqlBuilder.append("        ELSE 105 ");
+            sqlBuilder.append("    END as cash_txn_type, ");
+            sqlBuilder.append("    ln_txn.amount as txn_amount, ln_txn.transaction_date as txn_date, ");
+            sqlBuilder.append("    CONCAT(renum.enum_value, ', Loan:', loan.id, '-', loan.account_no, ',Client:', cl.id, '-', cl.display_name) as txn_note, ");
+            sqlBuilder.append("    'loan' as entity_type, loan.id as entity_id, ln_txn.created_date, ");
+            sqlBuilder.append("    o.id as office_id, o.name as office_name, NULL as teller_id, NULL as teller_name, staff.display_name as cashier_name ");
+            sqlBuilder.append("FROM m_loan_transaction ln_txn ");
+            sqlBuilder.append("LEFT JOIN r_enum_value renum ON ln_txn.transaction_type_enum = renum.enum_id AND renum.enum_name = 'loan_transaction_type_enum' ");
+            sqlBuilder.append("LEFT JOIN m_loan loan ON ln_txn.loan_id = loan.id ");
+            sqlBuilder.append("LEFT JOIN m_client cl ON loan.client_id = cl.id ");
+            sqlBuilder.append("LEFT JOIN m_office o ON cl.office_id = o.id ");
+            sqlBuilder.append("LEFT JOIN m_appuser user ON ln_txn.created_by = user.id ");
+            sqlBuilder.append("LEFT JOIN m_staff staff ON user.staff_id = staff.id ");
+            sqlBuilder.append("LEFT JOIN m_cashiers c ON c.staff_id = staff.id ");
+            sqlBuilder.append("WHERE ln_txn.is_reversed = FALSE AND c.id = ? ");
+            sqlBuilder.append("    AND loan.currency_code = ? ");
+            sqlBuilder.append("    AND o.hierarchy LIKE ? ");
+            sqlBuilder.append("    AND DATE(ln_txn.transaction_date) BETWEEN ? AND ? ");
+            
+            sqlBuilder.append(") AS all_txns ");
+            sqlBuilder.append("GROUP BY cash_txn_type");
+        
+            return sqlBuilder.toString();
+        }
+        
         @Override
         public CashierTransactionTypeTotalsData mapRow(final ResultSet rs, final int rowNum) throws SQLException {
 
@@ -857,6 +1177,37 @@ public class TellerManagementReadPlatformServiceImpl implements TellerManagement
 
             return CashierTransactionTypeTotalsData.instance(cashierTxnType, txnTotal);
         }
+    }
+
+    @Override
+    public Collection<CashierSession> getOpenCashierSessions(Long tellerId, LocalDate date) {
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'getOpenCashierSessions'");
+    }
+
+    @Override
+    public Collection<CashierSession> getClosedCashierSessions(Long tellerId, LocalDate fromDate, LocalDate toDate) {
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'getClosedCashierSessions'");
+    }
+
+    public TellerData findTellerSession(final Long tellerId) {
+
+        try {
+            final TellerMapper tm = new TellerMapper();
+            final String sql = "select " + tm.schemaTeller() + " where t.id = ?";
+
+            return this.jdbcTemplate.queryForObject(sql, tm, new Object[] { tellerId }); // NOSONAR
+        } catch (final EmptyResultDataAccessException e) {
+            //throw new StaffNotFoundException(tellerId, e);
+            throw new TellerNotFoundException(tellerId, e);
+        }
+    }
+
+    @Override
+    public TellerData getMyTeller(Long staffId) {
+        Cashier cashierData = cashierRepository.findCashierByStaffId(staffId).orElseThrow(()-> new CashierNotFoundException(staffId));
+        return findTellerSession(cashierData.getTeller().getId());
     }
 
 }

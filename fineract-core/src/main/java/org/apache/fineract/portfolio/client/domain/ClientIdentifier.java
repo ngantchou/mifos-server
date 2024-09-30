@@ -35,7 +35,7 @@ import org.apache.fineract.infrastructure.core.domain.AbstractAuditableWithUTCDa
 @Table(name = "m_client_identifier", uniqueConstraints = {
         @UniqueConstraint(columnNames = { "document_type_id", "document_key" }, name = "unique_identifier_key"),
         @UniqueConstraint(columnNames = { "client_id", "document_key", "active" }, name = "unique_active_client_identifier") })
-public class ClientIdentifier extends AbstractAuditableWithUTCDateTimeCustom {
+public class ClientIdentifier extends AbstractAuditableWithUTCDateTimeCustom<Long> {
 
     @ManyToOne
     @JoinColumn(name = "client_id", nullable = false)
@@ -112,8 +112,8 @@ public class ClientIdentifier extends AbstractAuditableWithUTCDateTimeCustom {
 
         final String statusParamName = "status";
         if (command.isChangeInStringParameterNamed(statusParamName, ClientIdentifierStatus.fromInt(this.status).getCode())) {
-            final String newValue = command.stringValueOfParameterNamed(descriptionParamName);
-            actualChanges.put(descriptionParamName, ClientIdentifierStatus.valueOf(newValue));
+            final String newValue = command.stringValueOfParameterNamed(statusParamName);
+            actualChanges.put(statusParamName, ClientIdentifierStatus.valueOf(newValue));
             this.status = ClientIdentifierStatus.valueOf(newValue).getValue();
         }
 

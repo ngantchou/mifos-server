@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.fineract.infrastructure.core.api.JsonCommand;
 import org.apache.fineract.infrastructure.core.data.ApiParameterError;
 import org.apache.fineract.infrastructure.core.data.DataValidatorBuilder;
 import org.apache.fineract.infrastructure.core.exception.InvalidJsonException;
@@ -198,5 +199,18 @@ public final class TellerCommandFromApiJsonDeserializer {
 
         final String currencyCode = this.fromApiJsonHelper.extractStringNamed(CURRENCY_CODE, element);
         baseDataValidator.reset().parameter(CURRENCY_CODE).value(currencyCode).notExceedingLengthOf(3);
+    }
+    public void validateForOpeningSession(JsonCommand command) {
+        final BigDecimal openingAmount = command.bigDecimalValueOfParameterNamed("openingAmount");
+        if (openingAmount == null || openingAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new InvalidJsonException();
+        }
+    }
+
+    public void validateForClosingSession(JsonCommand command) {
+        final BigDecimal closingAmount = command.bigDecimalValueOfParameterNamed("closingAmount");
+        if (closingAmount == null || closingAmount.compareTo(BigDecimal.ZERO) < 0) {
+            throw new InvalidJsonException();
+        }
     }
 }

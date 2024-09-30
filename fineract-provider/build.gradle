@@ -143,7 +143,7 @@ if (!(project.hasProperty('env') && project.getProperty('env') == 'dev')) {
 import groovy.sql.Sql
 
 project.ext.mysqlUser='root'
-project.ext.mysqlPassword='mysql'
+project.ext.mysqlPassword=''
 project.ext.pgUser='root'
 project.ext.pgPassword='postgres'
 
@@ -351,3 +351,4 @@ rat.dependsOn prepareInputYaml
 spotbugsTest.dependsOn resolve
 compileTestJava.dependsOn ':fineract-client:processResources', ':fineract-avro-schemas:processResources'
 resolveMainClassName.dependsOn resolve
+processResources.dependsOn compileJava

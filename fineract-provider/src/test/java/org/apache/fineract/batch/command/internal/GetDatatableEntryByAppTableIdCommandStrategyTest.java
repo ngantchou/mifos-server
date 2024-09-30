@@ -65,7 +65,6 @@ public class GetDatatableEntryByAppTableIdCommandStrategyTest {
      * @param numberOfQueryParams
      *            number of query params are provided
      */
-    @SuppressWarnings("deprecation")
     @ParameterizedTest
     @MethodSource("provideQueryParameters")
     public void testExecuteSuccessScenario(final String queryParameter, final int numberOfQueryParams) {
