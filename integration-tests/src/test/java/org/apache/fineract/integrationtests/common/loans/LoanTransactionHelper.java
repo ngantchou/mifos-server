@@ -601,6 +601,16 @@ public class LoanTransactionHelper extends IntegrationTest {
         return ok(fineract().loanTransactions.executeLoanTransaction(loanId, request, "repayment"));
     }
 
+    public PostLoansLoanIdTransactionsResponse makeInterestPaymentWaiver(final Long loanId,
+            final PostLoansLoanIdTransactionsRequest request) {
+        return ok(fineract().loanTransactions.executeLoanTransaction(loanId, request, "interestPaymentWaiver"));
+    }
+
+    public PostLoansLoanIdTransactionsResponse makeInterestPaymentWaiver(final String loanExternalId,
+            final PostLoansLoanIdTransactionsRequest request) {
+        return ok(fineract().loanTransactions.executeLoanTransaction1(loanExternalId, request, "interestPaymentWaiver"));
+    }
+
     public PostLoansLoanIdTransactionsResponse reAge(final Long loanId, final PostLoansLoanIdTransactionsRequest request) {
         return ok(fineract().loanTransactions.executeLoanTransaction(loanId, request, "reAge"));
     }
@@ -1688,6 +1698,14 @@ public class LoanTransactionHelper extends IntegrationTest {
         log.info(
                 "---------------------------------GET A LOAN TRANSACTION ENTITY AUDIT FIELDS---------------------------------------------");
         return Utils.performServerGet(requestSpec, responseSpec, GET_LOAN_TRANSACTION_URL, jsonReturn);
+    }
+
+    public Long applyInterestRefundLoanTransaction(final RequestSpecification requestSpec, final ResponseSpecification responseSpec,
+            final Long loanId, final String jsonBody) {
+        final String POST_LOAN_TRANSACTION_URL = "/fineract-provider/api/v1/internal/loan/" + loanId + "/apply-interest-refund/" + "?"
+                + Utils.TENANT_IDENTIFIER;
+        final String reponse = Utils.performServerPost(requestSpec, responseSpec, POST_LOAN_TRANSACTION_URL, jsonBody);
+        return Long.valueOf(reponse);
     }
 
     public void printRepaymentSchedule(GetLoansLoanIdResponse getLoansLoanIdResponse) {

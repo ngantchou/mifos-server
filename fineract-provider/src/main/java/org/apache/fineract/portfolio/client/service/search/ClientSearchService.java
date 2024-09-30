@@ -58,7 +58,6 @@ public class ClientSearchService {
 
         Optional<ClientTextSearch> request = searchRequest.getRequest();
         String requestSearchText = request.map(ClientTextSearch::getText).orElse(null);
-        @SuppressWarnings("deprecation")
         String searchText = StringUtils.defaultString(requestSearchText, "");
 
         Pageable pageable = searchRequest.toPageable();
