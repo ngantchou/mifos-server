@@ -1108,6 +1108,7 @@ public class SavingsAccount extends AbstractAuditableWithUTCDateTimeCustom<Long>
     public SavingsAccountTransaction deposit(final SavingsAccountTransactionDTO transactionDTO,
             final SavingsAccountTransactionType savingsAccountTransactionType, final boolean backdatedTxnsAllowedTill,
             final Long relaxingDaysConfigForPivotDate, final String refNo) {
+
         final String resourceTypeName = depositAccountType().resourceName();
         if (isNotActive()) {
             final String defaultUserMessage = "Transaction is not allowed. Account is not active.";

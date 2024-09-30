@@ -28,10 +28,13 @@ import org.apache.fineract.organisation.teller.data.CashierTransactionsWithSumma
 import org.apache.fineract.organisation.teller.data.TellerData;
 import org.apache.fineract.organisation.teller.data.TellerJournalData;
 import org.apache.fineract.organisation.teller.data.TellerTransactionData;
+import org.apache.fineract.organisation.teller.domain.CashierSession;
 
 public interface TellerManagementReadPlatformService {
 
     Collection<TellerData> getTellers(Long officeId);
+
+    TellerData getMyTeller(Long officeId);
 
     TellerData findTeller(Long tellerId);
 
@@ -63,8 +66,16 @@ public interface TellerManagementReadPlatformService {
 
     Page<CashierTransactionData> retrieveCashierTransactions(Long cashierId, boolean includeAllTellers, LocalDate fromDate,
             LocalDate toDate, String currencyCode, SearchParameters searchParameters);
+     Page<CashierTransactionData> retrieveCashierTransactionsForDateRange(Long cashierId, boolean includeAllTellers, LocalDate fromDate,
+            LocalDate toDate, String currencyCode, SearchParameters searchParameters);
 
     CashierTransactionsWithSummaryData retrieveCashierTransactionsWithSummary(Long cashierId, boolean includeAllTellers, LocalDate fromDate,
             LocalDate toDate, String currencyCode, SearchParameters searchParameters);
+    CashierTransactionsWithSummaryData retrieveCashierTransactionsWithSummaryForDateRange(Long cashierId, boolean includeAllTellers, LocalDate fromDate,
+            LocalDate toDate, String currencyCode, SearchParameters searchParameters);
+                    
+    // New methods for retrieving open and closed cashier sessions
+    Collection<CashierSession> getOpenCashierSessions(Long tellerId, LocalDate date);
 
+    Collection<CashierSession> getClosedCashierSessions(Long tellerId, LocalDate fromDate, LocalDate toDate);
 }

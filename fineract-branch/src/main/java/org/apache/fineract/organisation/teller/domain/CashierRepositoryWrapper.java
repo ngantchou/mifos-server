@@ -18,9 +18,11 @@
  */
 package org.apache.fineract.organisation.teller.domain;
 
+import org.apache.fineract.organisation.teller.exception.CashierNotFoundException;
 import org.apache.fineract.organisation.teller.exception.TellerNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class CashierRepositoryWrapper {
@@ -33,6 +35,12 @@ public class CashierRepositoryWrapper {
     }
 
     public Cashier findOneWithNotFoundDetection(final Long id) {
-        return this.repository.findById(id).orElseThrow(() -> new TellerNotFoundException(id));
+        return this.repository.findById(id).orElseThrow(() -> new CashierNotFoundException(id));
+    }
+
+    @Transactional(readOnly = true)
+    public Cashier findOneByStaffIdWithNotFoundDetection(final Long id) {
+        final Cashier cashier = this.repository.findCashierByStaffId(id).orElseThrow(() -> new CashierNotFoundException(id));
+        return cashier;
     }
 }

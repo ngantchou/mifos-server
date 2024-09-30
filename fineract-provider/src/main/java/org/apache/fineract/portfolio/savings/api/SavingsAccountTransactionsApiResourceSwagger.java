@@ -23,6 +23,8 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.Set;
+
+
 import org.apache.fineract.portfolio.TransactionEntryType;
 
 final class SavingsAccountTransactionsApiResourceSwagger {
@@ -189,11 +191,25 @@ final class SavingsAccountTransactionsApiResourceSwagger {
         public Set<GetSavingsAccountTransactionsPageItem> content;
     }
 
+
     @Schema(description = "PostSavingsAccountTransactionsRequest")
     public static final class PostSavingsAccountTransactionsRequest {
 
         private PostSavingsAccountTransactionsRequest() {}
-
+        
+        @Schema(description = "BilletageRequest")
+        public static final class BilletageRequest {
+                
+            private BilletageRequest(){}
+    
+            @Schema(description = "Denomination of the currency", example = "100.00")
+            private Double denomination;
+    
+            @Schema(description = "Quantity of the denomination", example = "5")
+            private Integer count;
+            // Difference between the cashier and teller counts
+        }
+    
         @Schema(example = "27 March 2022")
         public String transactionDate;
         @Schema(example = "1000")
@@ -208,6 +224,7 @@ final class SavingsAccountTransactionsApiResourceSwagger {
         public String reasonForBlock;
         @Schema(example = "1")
         public Integer paymentTypeId;
+
     }
 
     @Schema(description = "PostSavingsAccountTransactionsResponse")

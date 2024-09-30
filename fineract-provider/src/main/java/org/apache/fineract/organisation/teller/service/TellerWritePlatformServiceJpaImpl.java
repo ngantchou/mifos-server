@@ -19,6 +19,10 @@
 package org.apache.fineract.organisation.teller.service;
 
 import jakarta.persistence.PersistenceException;
+
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
 import lombok.AllArgsConstructor;
@@ -44,15 +48,21 @@ import org.apache.fineract.organisation.staff.domain.Staff;
 import org.apache.fineract.organisation.staff.domain.StaffRepository;
 import org.apache.fineract.organisation.staff.exception.StaffNotFoundException;
 import org.apache.fineract.organisation.teller.data.CashierTransactionDataValidator;
+import org.apache.fineract.organisation.teller.domain.Billetage;
+import org.apache.fineract.organisation.teller.domain.BilletageRepository;
 import org.apache.fineract.organisation.teller.domain.Cashier;
 import org.apache.fineract.organisation.teller.domain.CashierRepository;
+import org.apache.fineract.organisation.teller.domain.CashierSession;
+import org.apache.fineract.organisation.teller.domain.CashierSessionRepository;
 import org.apache.fineract.organisation.teller.domain.CashierTransaction;
 import org.apache.fineract.organisation.teller.domain.CashierTransactionRepository;
 import org.apache.fineract.organisation.teller.domain.CashierTxnType;
 import org.apache.fineract.organisation.teller.domain.Teller;
 import org.apache.fineract.organisation.teller.domain.TellerRepositoryWrapper;
+import org.apache.fineract.organisation.teller.domain.TellerStatus;
 import org.apache.fineract.organisation.teller.exception.CashierExistForTellerException;
 import org.apache.fineract.organisation.teller.exception.CashierNotFoundException;
+import org.apache.fineract.organisation.teller.exception.CashierSessionNotFoundException;
 import org.apache.fineract.organisation.teller.serialization.TellerCommandFromApiJsonDeserializer;
 import org.apache.fineract.useradministration.domain.AppUser;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -73,6 +83,8 @@ public class TellerWritePlatformServiceJpaImpl implements TellerWritePlatformSer
     private final JournalEntryRepository glJournalEntryRepository;
     private final FinancialActivityAccountRepositoryWrapper financialActivityAccountRepositoryWrapper;
     private final CashierTransactionDataValidator cashierTransactionDataValidator;
+    private final CashierSessionRepository cashierSessionRepository;
+    private final BilletageRepository  billetageRepository;
 
     @Override
     @Transactional
@@ -446,6 +458,69 @@ public class TellerWritePlatformServiceJpaImpl implements TellerWritePlatformSer
             handleTellerDataIntegrityIssues(command, throwable, dve);
             return CommandProcessingResult.empty();
         }
+    }
+
+    @Override
+    public CommandProcessingResult openCashierSession(Long tellerId, Long cashierId, JsonCommand command) {
+    // Validate command parameters for opening a session
+    //this.cashierSessionValidator.validateForOpeningSession(command);
+    final AppUser currentUser = this.context.authenticatedUser();
+    final Teller teller = validateUserPriviledgeOnTellerAndRetrieve(currentUser, tellerId); 
+    final Cashier cashier = this.cashierRepository.findById(cashierId).orElseThrow(() -> new CashierNotFoundException(cashierId));  
+    // Create and save a new cashier session
+    CashierSession cashierSession = CashierSession.fromJson(cashier, command);
+    cashierSession.setStartTime(LocalTime.now());
+    cashierSession.setStatus(true);
+    // change status of teller
+    teller.setStatus(TellerStatus.ACTIVE.getValue());
+    this.tellerRepositoryWrapper.saveAndFlush(teller); 
+
+    this.cashierSessionRepository.save(cashierSession);
+    // Create and Save Billetage Entries
+
+    Collection<Billetage> billetages = Billetage.fromJson(command, teller, cashierSession, null, null);
+    // If a single billetage object or list is passed, save all entries
+    this.billetageRepository.saveAll(billetages);
+
+    // Create journal entry for opening session
+    // createJournalEntryForCashierSession(cashierSession, JournalEntryType.DEBIT);
+
+    return new CommandProcessingResultBuilder()
+            .withCommandId(command.commandId())
+            .withEntityId(cashierSession.getId())
+            .build();
+    }
+
+    @Override
+    public CommandProcessingResult closeCashierSession(Long tellerId, Long cashierId, JsonCommand command) {
+        //this.cashierSessionValidator.validateForClosingSession(command);
+        final AppUser currentUser = this.context.authenticatedUser();
+        final Teller teller = validateUserPriviledgeOnTellerAndRetrieve(currentUser, tellerId); 
+        
+        final Cashier cashier = this.cashierRepository.findById(cashierId).orElseThrow(() -> new CashierNotFoundException(cashierId));  
+        // Create and save a new cashier session
+        CashierSession cashierSession = CashierSession.fromJson(cashier, command);
+
+        cashierSession.setEndTime(LocalTime.now());
+        cashierSession.setEndDate(LocalDate.now());
+        cashierSession.setStatus(false);
+        cashierSession.setNotes(command.stringValueOfParameterNamed("description"));
+        // change status of teller
+        teller.setStatus(TellerStatus.INACTIVE.getValue());
+        this.tellerRepositoryWrapper.saveAndFlush(teller); 
+        this.cashierSessionRepository.save(cashierSession);
+        // Create and Save Billetage Entries
+        
+        Collection<Billetage> billetages = Billetage.fromJson(command, teller, cashierSession, null, null);
+        // If a single billetage object or list is passed, save all entries
+        this.billetageRepository.saveAll(billetages);
+
+        //createJournalEntryForCashierSession(cashierSession, JournalEntryType.CREDIT);
+
+        return new CommandProcessingResultBuilder()
+                .withCommandId(command.commandId())
+                .withEntityId(cashierSession.getId())
+                .build();
     }
 
 }

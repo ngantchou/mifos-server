@@ -85,4 +85,8 @@ public interface TellerWritePlatformService {
     CommandProcessingResult allocateCashToCashier(Long cashierId, JsonCommand command);
 
     CommandProcessingResult settleCashFromCashier(Long cashierId, JsonCommand command);
+
+    CommandProcessingResult openCashierSession(Long tellerId, Long cashierId, JsonCommand command);
+
+    CommandProcessingResult closeCashierSession(Long tellerId, Long cashierId, JsonCommand command);
 }

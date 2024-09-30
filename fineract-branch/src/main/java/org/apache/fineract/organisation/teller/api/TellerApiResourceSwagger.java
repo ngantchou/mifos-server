@@ -19,15 +19,22 @@
 package org.apache.fineract.organisation.teller.api;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+
+import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collection;
+import java.util.Set;
+
 import org.apache.fineract.infrastructure.core.service.Page;
 import org.apache.fineract.organisation.monetary.data.CurrencyData;
 import org.apache.fineract.organisation.staff.data.StaffData;
+import org.apache.fineract.organisation.teller.data.BilletageCloseData;
+import org.apache.fineract.organisation.teller.data.BilletageOpenData;
 import org.apache.fineract.organisation.teller.data.CashierData;
 import org.apache.fineract.organisation.teller.data.CashierTransactionData;
+import org.apache.fineract.organisation.teller.domain.Billetage;
 import org.apache.fineract.organisation.teller.domain.CashierTxnType;
 import org.apache.fineract.organisation.teller.domain.TellerStatus;
 
@@ -488,4 +495,107 @@ final class TellerApiResourceSwagger {
         public Collection<CurrencyData> currencyOptions;
     }
 
+    @Schema(description = "PostTellersTellerIdCashiersCashierIdOpenRequest")
+    public static final class PostTellersTellerIdCashiersCashierIdOpenRequest {
+
+        private PostTellersTellerIdCashiersCashierIdOpenRequest() {
+
+        }
+        public  class BilletageOpenDataRequest {
+            
+            private BilletageOpenDataRequest(){}
+
+            @Schema(description = "Denomination of the currency", example = "100.00")
+            private Double denomination;
+
+            @Schema(description = "Quantity of the denomination", example = "5")
+            private Integer quantity;
+            // Difference between the cashier and teller counts
+        }
+
+        @Schema(description = "Opening amount", example = "1000")
+        public Double openingAmount;
+        //@Schema(description = "Billetage details", example = "[{'denomination': 100, 'quantity': 10}]")
+        public Set<BilletageOpenDataRequest> billetage;
+        @Schema(description = "Additional notes", example = "Opening cashier session for daily operations")
+        public String notes;
+        @Schema(example = "Feb 20, 2015 12:00:00 AM")
+        public LocalDate startDate;
+        @Schema(example = "12:00:00 AM")
+        public String startTime;
+    }
+
+    // Response for opening a cashier session
+    @Schema(description = "OpenCashierSessionResponse")
+    public static class OpenCashierSessionResponse {
+
+        private OpenCashierSessionResponse() {
+
+        }
+        @Schema(description = "Cashier ID", example = "123")
+        public Long cashierId;
+
+        @Schema(description = "Opening amount", example = "1000")
+        public Double openingAmount;
+
+        @Schema(description = "Status of the session opening", example = "Cashier session opened successfully")
+        public String status;
+
+        // Getters and setters
+    }
+
+    @Schema(description = "PostTellersTellerIdCashiersCashierIdCloseRequest")
+    public static final class PostTellersTellerIdCashiersCashierIdCloseRequest {
+
+        private PostTellersTellerIdCashiersCashierIdCloseRequest() {
+
+        }
+
+        public  class BilletageCloseDataRequest {
+            
+            private BilletageCloseDataRequest(){}
+
+            @Schema(description = "Denomination of the currency", example = "100.00")
+            private Double denomination;
+
+            @Schema(description = "Quantity of the denomination", example = "5")
+            private Integer quantity;
+            // Difference between the cashier and teller counts
+        }
+
+        @Schema(description = "Closing amount", example = "800")
+        public Double closingAmount;
+
+        //@Schema(description = "Billetage details", example = "[{'denomination': 100, 'quantity': 8}]")
+        public Set<BilletageCloseDataRequest> billetage;
+
+        @Schema(description = "Reconciliation data", example = "[{'expected': 800, 'actual': 780}]")
+        public String reconciliation;
+
+        @Schema(description = "Additional notes", example = "Closing cashier session after operations")
+        public String notes;
+        @Schema(example = "Feb 20, 2015 12:00:00 AM")
+        public LocalDate endDate;
+        @Schema(example = "12:00:00 AM")
+        public String endTime;
+    }
+
+    // Response for closing a cashier session
+    @Schema(description = "CloseCashierSessionResponse")
+    public static class CloseCashierSessionResponse {
+
+        private CloseCashierSessionResponse() {
+
+        }
+        @Schema(description = "Cashier ID", example = "123")
+        public Long cashierId;
+
+        @Schema(description = "Closing amount", example = "800")
+        public Double closingAmount;
+
+        @Schema(description = "Status of the session closing", example = "Cashier session closed successfully")
+        public String status;
+
+        // Getters and setters
+    }
 }

@@ -30,7 +30,9 @@ import org.apache.fineract.organisation.office.service.OfficeReadPlatformService
 import org.apache.fineract.organisation.staff.domain.StaffRepository;
 import org.apache.fineract.organisation.staff.service.StaffReadPlatformService;
 import org.apache.fineract.organisation.teller.data.CashierTransactionDataValidator;
+import org.apache.fineract.organisation.teller.domain.BilletageRepository;
 import org.apache.fineract.organisation.teller.domain.CashierRepository;
+import org.apache.fineract.organisation.teller.domain.CashierSessionRepository;
 import org.apache.fineract.organisation.teller.domain.CashierTransactionRepository;
 import org.apache.fineract.organisation.teller.domain.TellerRepositoryWrapper;
 import org.apache.fineract.organisation.teller.serialization.TellerCommandFromApiJsonDeserializer;
@@ -51,9 +53,10 @@ public class OrganisationTellerConfiguration {
     public TellerManagementReadPlatformService tellerManagementReadPlatformService(JdbcTemplate jdbcTemplate,
             PlatformSecurityContext context, OfficeReadPlatformService officeReadPlatformService,
             StaffReadPlatformService staffReadPlatformService, CurrencyReadPlatformService currencyReadPlatformService,
-            DatabaseSpecificSQLGenerator sqlGenerator, PaginationHelper paginationHelper, ColumnValidator columnValidator) {
+            DatabaseSpecificSQLGenerator sqlGenerator, PaginationHelper paginationHelper, ColumnValidator columnValidator,
+             CashierRepository cashierRepository, TellerRepositoryWrapper tellerRepositoryWrapper,CashierSessionRepository cashierSessionRepository) {
         return new TellerManagementReadPlatformServiceImpl(jdbcTemplate, context, officeReadPlatformService, staffReadPlatformService,
-                currencyReadPlatformService, sqlGenerator, paginationHelper, columnValidator);
+                currencyReadPlatformService, sqlGenerator, paginationHelper, columnValidator, cashierRepository, tellerRepositoryWrapper,cashierSessionRepository);
     }
 
     @Bean
@@ -63,9 +66,10 @@ public class OrganisationTellerConfiguration {
             OfficeRepositoryWrapper officeRepositoryWrapper, StaffRepository staffRepository, CashierRepository cashierRepository,
             CashierTransactionRepository cashierTxnRepository, JournalEntryRepository glJournalEntryRepository,
             FinancialActivityAccountRepositoryWrapper financialActivityAccountRepositoryWrapper,
-            CashierTransactionDataValidator cashierTransactionDataValidator) {
+            CashierTransactionDataValidator cashierTransactionDataValidator,CashierSessionRepository cashierSessionRepository,
+            BilletageRepository billetageRepository) {
         return new TellerWritePlatformServiceJpaImpl(context, fromApiJsonDeserializer, tellerRepositoryWrapper, officeRepositoryWrapper,
                 staffRepository, cashierRepository, cashierTxnRepository, glJournalEntryRepository,
-                financialActivityAccountRepositoryWrapper, cashierTransactionDataValidator);
+                financialActivityAccountRepositoryWrapper, cashierTransactionDataValidator,cashierSessionRepository,billetageRepository);
     }
 }

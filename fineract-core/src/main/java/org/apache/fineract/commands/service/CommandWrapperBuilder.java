@@ -2823,7 +2823,23 @@ public class CommandWrapperBuilder {
         this.href = "/tellers/" + tellerId + "/cashiers/" + cashierId + "/settle";
         return this;
     }
-
+    public CommandWrapperBuilder openCashierSession(Long tellerId, Long cashierId) {
+        this.actionName = "OPENCASHIERSESSION";
+        this.entityName = "CASHIER";
+        this.entityId = tellerId;
+        this.subentityId = cashierId;
+        this.href = "/tellers/" + tellerId + "/cashiers/" + cashierId + "/open";
+        return this;
+    }
+    
+    public CommandWrapperBuilder closeCashierSession(Long tellerId, Long cashierId) {
+        this.actionName = "CLOSECASHIERSESSION";
+        this.entityName = "CASHIER";
+        this.entityId = tellerId;
+        this.subentityId = cashierId;
+        this.href = "/tellers/" + tellerId + "/cashiers/" + cashierId + "/close";
+        return this;
+    }
     public CommandWrapperBuilder deleteRole(Long roleId) {
         this.actionName = "DELETE";
         this.entityName = "ROLE";
