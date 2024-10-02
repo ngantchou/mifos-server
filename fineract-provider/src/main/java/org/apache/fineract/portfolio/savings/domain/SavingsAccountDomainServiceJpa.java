@@ -18,6 +18,8 @@
  */
 package org.apache.fineract.portfolio.savings.domain;
 
+import static org.apache.fineract.portfolio.savings.SavingsApiConstants.sourceOfFunds;
+
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.time.LocalDate;
@@ -329,5 +331,71 @@ public class SavingsAccountDomainServiceJpa implements SavingsAccountDomainServi
         postJournalEntries(account, existingTransactionIds, existingReversedTransactionIds, false, backdatedTxnsAllowedTill);
 
         return reversal;
+    }
+
+    @Override
+    public SavingsAccountTransaction handleDeposit(SavingsAccount account, DateTimeFormatter fmt,
+            LocalDate transactionDate, BigDecimal transactionAmount, PaymentDetail paymentDetail,
+            boolean isAccountTransfer, boolean isRegularTransaction, boolean backdatedTxnsAllowedTill, String note,
+            String sourceOfFunds, String depositName, String amountInWords) {
+            context.authenticatedUser();
+            account.validateForAccountBlock();
+            account.validateForCreditBlock();
+    
+            // Global configurations
+            final boolean isSavingsInterestPostingAtCurrentPeriodEnd = this.configurationDomainService
+                    .isSavingsInterestPostingAtCurrentPeriodEnd();
+            final Integer financialYearBeginningMonth = this.configurationDomainService.retrieveFinancialYearBeginningMonth();
+            final Long relaxingDaysConfigForPivotDate = this.configurationDomainService.retrieveRelaxingDaysConfigForPivotDate();
+            if (isRegularTransaction && !account.allowDeposit()) {
+                throw new DepositAccountTransactionNotAllowedException(account.getId(), "deposit", account.depositAccountType());
+            }
+            boolean isInterestTransfer = false;
+            final Set<Long> existingTransactionIds = new HashSet<>();
+            final Set<Long> existingReversedTransactionIds = new HashSet<>();
+    
+            if (backdatedTxnsAllowedTill) {
+                updateTransactionDetailsWithPivotConfig(account, existingTransactionIds, existingReversedTransactionIds);
+            } else {
+                updateExistingTransactionsDetails(account, existingTransactionIds, existingReversedTransactionIds);
+            }
+    
+            Integer accountType = null;
+            final SavingsAccountTransactionDTO transactionDTO = new SavingsAccountTransactionDTO(fmt, transactionDate, transactionAmount,
+                    paymentDetail, null, accountType);
+            UUID refNo = UUID.randomUUID();
+            final SavingsAccountTransactionType savingsAccountTransactionType = SavingsAccountTransactionType.DEPOSIT;
+            final SavingsAccountTransaction deposit = account.deposit(transactionDTO, savingsAccountTransactionType, backdatedTxnsAllowedTill,
+                    relaxingDaysConfigForPivotDate, refNo.toString());
+            final LocalDate postInterestOnDate = null;
+            final MathContext mc = MathContext.DECIMAL64;
+    
+            final LocalDate today = DateUtils.getBusinessLocalDate();
+            boolean postReversals = this.configurationDomainService.isReversalTransactionAllowed();
+            if (account.isBeforeLastPostingPeriod(transactionDate, backdatedTxnsAllowedTill)) {
+                account.postInterest(mc, today, isInterestTransfer, isSavingsInterestPostingAtCurrentPeriodEnd, financialYearBeginningMonth,
+                        postInterestOnDate, backdatedTxnsAllowedTill, postReversals);
+            } else {
+                account.calculateInterestUsing(mc, today, isInterestTransfer, isSavingsInterestPostingAtCurrentPeriodEnd,
+                        financialYearBeginningMonth, postInterestOnDate, backdatedTxnsAllowedTill, postReversals);
+            }
+            
+            deposit.setNote(note);
+            deposit.setSourceOfFunds(sourceOfFunds);
+            deposit.setDepositName(depositName);
+            deposit.setAmountInWords(amountInWords);
+
+            saveTransactionToGenerateTransactionId(deposit);
+    
+            if (backdatedTxnsAllowedTill) {
+                // Update transactions separately
+                saveUpdatedTransactionsOfSavingsAccount(account.getSavingsAccountTransactionsWithPivotConfig());
+            }
+    
+            this.savingsAccountRepository.saveAndFlush(account);
+    
+            postJournalEntries(account, existingTransactionIds, existingReversedTransactionIds, isAccountTransfer, backdatedTxnsAllowedTill);
+            businessEventNotifierService.notifyPostBusinessEvent(new SavingsDepositBusinessEvent(deposit));
+            return deposit;
     }
 }

@@ -138,6 +138,18 @@ public final class SavingsAccountTransaction extends AbstractAuditableWithUTCDat
     @Column(name = "ref_no", nullable = true)
     private String refNo;
 
+    @Column(name = "amount_in_words", nullable = true)
+    private String amountInWords;
+
+    @Column(name = "save_note", nullable = true)
+    private String note; 
+
+    @Column(name = "source_of_funds", nullable = true)
+    private String sourceOfFunds; 
+
+    @Column(name = "deposit_name", nullable = true)
+    private String depositName; 
+
     SavingsAccountTransaction() {}
 
     private SavingsAccountTransaction(final SavingsAccount savingsAccount, final Office office, final PaymentDetail paymentDetail,
@@ -880,5 +892,21 @@ public final class SavingsAccountTransaction extends AbstractAuditableWithUTCDat
         return new SavingsAccountTransactionDetailsForPostingPeriod(getId(), this.dateOf, this.balanceEndDate, this.runningBalance,
                 this.amount, currency, this.balanceNumberOfDays, isDeposit(), isWithdrawal(), isAllowOverDraft,
                 isChargeTransactionAndNotReversed(), isDividendPayoutAndNotReversed());
+    }
+
+    public void setNote(String note2) {
+        this.note = note2;
+    }
+
+    public void setSourceOfFunds(String sourceOfFunds2) {
+        this.sourceOfFunds = sourceOfFunds2;
+    }
+
+    public void setDepositName(String depositName2) {
+        this.depositName = depositName2;
+    }
+
+    public void setAmountInWords(String amountInWords2) {
+        this.amountInWords = amountInWords2;
     }
 }
