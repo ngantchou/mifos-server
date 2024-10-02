@@ -87,6 +87,7 @@ import org.apache.fineract.organisation.teller.domain.Cashier;
 import org.apache.fineract.organisation.teller.domain.CashierRepositoryWrapper;
 import org.apache.fineract.organisation.teller.domain.Teller;
 import org.apache.fineract.organisation.teller.domain.TellerRepositoryWrapper;
+import org.apache.fineract.organisation.teller.domain.TellerStatus;
 import org.apache.fineract.organisation.workingdays.domain.WorkingDaysRepositoryWrapper;
 import org.apache.fineract.portfolio.account.PortfolioAccountType;
 import org.apache.fineract.portfolio.account.domain.AccountTransferStandingInstruction;
@@ -258,7 +259,7 @@ public class SavingsAccountWritePlatformServiceJpaRepositoryImpl implements Savi
         if (amountForDeposit.isGreaterThanZero()) {
             boolean isAccountTransfer = false;
             this.savingsAccountDomainService.handleDeposit(account, fmt, account.getActivationDate(), amountForDeposit.getAmount(), null,
-                    isAccountTransfer, isRegularTransaction, false);
+                    isAccountTransfer, isRegularTransaction, false, null, null, null, null);
 
             updateExistingTransactionsDetails(account, existingTransactionIds, existingReversedTransactionIds);
         }
@@ -311,6 +312,11 @@ public class SavingsAccountWritePlatformServiceJpaRepositoryImpl implements Savi
         final LocalDate transactionDate = command.localDateValueOfParameterNamed("transactionDate");
         final BigDecimal transactionAmount = command.bigDecimalValueOfParameterNamed("transactionAmount");
 
+        final String noteTransaction = command.stringValueOfParameterNamed("note");
+        final String amountInWord = command.stringValueOfParameterNamed("amountInWords");
+        final String sourceOfFunds = command.stringValueOfParameterNamed("sourceOfFunds");
+        final String depositName = command.stringValueOfParameterNamed("depositName");
+
         this.savingsAccountTransactionDataValidator.validateTransactionWithPivotDate(transactionDate, account);
 
         final Map<String, Object> changes = new LinkedHashMap<>();
@@ -318,7 +324,7 @@ public class SavingsAccountWritePlatformServiceJpaRepositoryImpl implements Savi
         boolean isAccountTransfer = false;
         boolean isRegularTransaction = true;
         final SavingsAccountTransaction deposit = this.savingsAccountDomainService.handleDeposit(account, fmt, transactionDate,
-                transactionAmount, paymentDetail, isAccountTransfer, isRegularTransaction, backdatedTxnsAllowedTill);
+                transactionAmount, paymentDetail, isAccountTransfer, isRegularTransaction, backdatedTxnsAllowedTill, noteTransaction, sourceOfFunds, depositName, amountInWord);
 
         if (isGsim && (deposit.getId() != null)) {
 
@@ -1947,6 +1953,9 @@ public class SavingsAccountWritePlatformServiceJpaRepositoryImpl implements Savi
         final Teller tellerToReturn = cashierToReturn.getTeller();
         if (userOffice.doesNotHaveAnOfficeInHierarchyWithId(tellerToReturn.officeId())) {
             throw new NoAuthorizationException("User does not have sufficient priviledges to act on the provided office.");
+        }
+        if (tellerToReturn.getStatus().equals(TellerStatus.INACTIVE.getValue())) {
+            throw new NoAuthorizationException("Les transactions ne sont pas autorisées, La caisse est inactive.");
         }
         return tellerToReturn;
     }
