@@ -79,12 +79,14 @@ import org.apache.fineract.organisation.monetary.domain.MoneyHelper;
 import org.apache.fineract.organisation.office.domain.Office;
 import org.apache.fineract.organisation.office.domain.OfficeRepositoryWrapper;
 import org.apache.fineract.organisation.staff.domain.Staff;
+import org.apache.fineract.organisation.staff.domain.StaffRepository;
 import org.apache.fineract.organisation.staff.domain.StaffRepositoryWrapper;
 import org.apache.fineract.organisation.teller.domain.Billetage;
 import org.apache.fineract.organisation.teller.domain.BilletageRepository;
 import org.apache.fineract.organisation.teller.domain.Cashier;
 import org.apache.fineract.organisation.teller.domain.CashierRepositoryWrapper;
 import org.apache.fineract.organisation.teller.domain.Teller;
+import org.apache.fineract.organisation.teller.domain.TellerRepositoryWrapper;
 import org.apache.fineract.organisation.teller.domain.TellerStatus;
 import org.apache.fineract.organisation.workingdays.domain.WorkingDaysRepositoryWrapper;
 import org.apache.fineract.portfolio.account.PortfolioAccountType;
@@ -174,8 +176,10 @@ public class SavingsAccountWritePlatformServiceJpaRepositoryImpl implements Savi
     private final SavingsAccountInterestPostingService savingsAccountInterestPostingService;
     private final ErrorHandler errorHandler;
     private final BilletageRepository  billetageRepository;
+    private final TellerRepositoryWrapper tellerRepositoryWrapper;
     private final OfficeRepositoryWrapper officeRepositoryWrapper;
     private final CashierRepositoryWrapper cashierRepositoryWrapper;
+
 
     @Transactional
     @Override
@@ -289,7 +293,6 @@ public class SavingsAccountWritePlatformServiceJpaRepositoryImpl implements Savi
     public CommandProcessingResult deposit(final Long savingsId, final JsonCommand command) {
         final AppUser currentUser = this.context.authenticatedUser();
         final Teller teller = validateUserPriviledgeOnTellerAndRetrieve(currentUser); 
-
         this.savingsAccountTransactionDataValidator.validate(command);
         boolean isGsim = false;
 
@@ -425,10 +428,6 @@ public class SavingsAccountWritePlatformServiceJpaRepositoryImpl implements Savi
         // Create and Save Billetage Entries
         Collection<Billetage> billetages = Billetage.fromJson(command, teller, null, null, withdrawal.getRefNo());
         // If a single billetage object or list is passed, save all entries
-        if(billetages.size() > 0){
-            this.billetageRepository.saveAll(billetages);
-        }
-
         if(billetages.size() > 0){
             this.billetageRepository.saveAll(billetages);
         }
@@ -1407,7 +1406,7 @@ public class SavingsAccountWritePlatformServiceJpaRepositoryImpl implements Savi
         }
     }
 
-    @SuppressWarnings({ "unused", "static-access" })
+    @SuppressWarnings("unused")
     public SavingsAccountData fallbackPostInterest(SavingsAccountData savingsAccountData, boolean postInterestAs, LocalDate transactionDate,
             boolean backdatedTxnsAllowedTill, Throwable t) {
         // NOTE: allow caller to catch the exceptions
