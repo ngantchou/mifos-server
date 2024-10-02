@@ -72,13 +72,16 @@ import org.apache.fineract.infrastructure.event.business.domain.savings.SavingsC
 import org.apache.fineract.infrastructure.event.business.domain.savings.SavingsPostInterestBusinessEvent;
 import org.apache.fineract.infrastructure.event.business.service.BusinessEventNotifierService;
 import org.apache.fineract.infrastructure.security.exception.NoAuthorizationException;
+import org.apache.fineract.infrastructure.security.exception.NoAuthorizationException;
 import org.apache.fineract.infrastructure.security.service.PlatformSecurityContext;
 import org.apache.fineract.organisation.holiday.domain.HolidayRepositoryWrapper;
 import org.apache.fineract.organisation.monetary.domain.Money;
 import org.apache.fineract.organisation.monetary.domain.MoneyHelper;
 import org.apache.fineract.organisation.office.domain.Office;
 import org.apache.fineract.organisation.office.domain.OfficeRepositoryWrapper;
+import org.apache.fineract.organisation.office.domain.OfficeRepositoryWrapper;
 import org.apache.fineract.organisation.staff.domain.Staff;
+import org.apache.fineract.organisation.staff.domain.StaffRepository;
 import org.apache.fineract.organisation.staff.domain.StaffRepository;
 import org.apache.fineract.organisation.staff.domain.StaffRepositoryWrapper;
 import org.apache.fineract.organisation.teller.domain.Billetage;
@@ -180,6 +183,11 @@ public class SavingsAccountWritePlatformServiceJpaRepositoryImpl implements Savi
     private final OfficeRepositoryWrapper officeRepositoryWrapper;
     private final CashierRepositoryWrapper cashierRepositoryWrapper;
 
+    private final BilletageRepository  billetageRepository;
+    private final TellerRepositoryWrapper tellerRepositoryWrapper;
+    private final OfficeRepositoryWrapper officeRepositoryWrapper;
+    private final CashierRepositoryWrapper cashierRepositoryWrapper;
+
 
     @Transactional
     @Override
@@ -223,6 +231,7 @@ public class SavingsAccountWritePlatformServiceJpaRepositoryImpl implements Savi
         final Map<String, Object> changes = account.activate(user, command);
 
         entityDatatableChecksWritePlatformService.runTheCheckForProduct(savingsId, EntityTables.SAVINGS.getName(),
+                StatusEnum.ACTIVATE.getValue(), EntityTables.SAVINGS.getForeignKeyColumnNameOnDatatable(), account.productId());
                 StatusEnum.ACTIVATE.getValue(), EntityTables.SAVINGS.getForeignKeyColumnNameOnDatatable(), account.productId());
 
         if (!changes.isEmpty()) {
@@ -293,6 +302,8 @@ public class SavingsAccountWritePlatformServiceJpaRepositoryImpl implements Savi
     public CommandProcessingResult deposit(final Long savingsId, final JsonCommand command) {
         final AppUser currentUser = this.context.authenticatedUser();
         final Teller teller = validateUserPriviledgeOnTellerAndRetrieve(currentUser); 
+        final AppUser currentUser = this.context.authenticatedUser();
+        final Teller teller = validateUserPriviledgeOnTellerAndRetrieve(currentUser); 
         this.savingsAccountTransactionDataValidator.validate(command);
         boolean isGsim = false;
 
@@ -356,6 +367,14 @@ public class SavingsAccountWritePlatformServiceJpaRepositoryImpl implements Savi
             this.billetageRepository.saveAll(billetages);
         }
 
+        // Create and Save Billetage Entries
+        Collection<Billetage> billetages = Billetage.fromJson(command, teller, null, null, deposit.getRefNo());
+        // If a single billetage object or list is passed, save all entries
+        
+        if(billetages.size() > 0){
+            this.billetageRepository.saveAll(billetages);
+        }
+
         return new CommandProcessingResultBuilder() //
                 .withEntityId(deposit.getId()) //
                 .withOfficeId(account.officeId()) //
@@ -374,6 +393,10 @@ public class SavingsAccountWritePlatformServiceJpaRepositoryImpl implements Savi
     @Transactional
     @Override
     public CommandProcessingResult withdrawal(final Long savingsId, final JsonCommand command) {
+
+        final AppUser currentUser = this.context.authenticatedUser();
+        final Teller teller = validateUserPriviledgeOnTellerAndRetrieve(currentUser); 
+        
 
         final AppUser currentUser = this.context.authenticatedUser();
         final Teller teller = validateUserPriviledgeOnTellerAndRetrieve(currentUser); 
@@ -424,6 +447,12 @@ public class SavingsAccountWritePlatformServiceJpaRepositoryImpl implements Savi
         if (StringUtils.isNotBlank(noteText)) {
             final Note note = Note.savingsTransactionNote(account, withdrawal, noteText);
             this.noteRepository.save(note);
+        }
+        // Create and Save Billetage Entries
+        Collection<Billetage> billetages = Billetage.fromJson(command, teller, null, null, withdrawal.getRefNo());
+        // If a single billetage object or list is passed, save all entries
+        if(billetages.size() > 0){
+            this.billetageRepository.saveAll(billetages);
         }
         // Create and Save Billetage Entries
         Collection<Billetage> billetages = Billetage.fromJson(command, teller, null, null, withdrawal.getRefNo());
@@ -941,6 +970,7 @@ public class SavingsAccountWritePlatformServiceJpaRepositoryImpl implements Savi
         }
 
         entityDatatableChecksWritePlatformService.runTheCheckForProduct(savingsId, EntityTables.SAVINGS.getName(),
+                StatusEnum.CLOSE.getValue(), EntityTables.SAVINGS.getForeignKeyColumnNameOnDatatable(), account.productId());
                 StatusEnum.CLOSE.getValue(), EntityTables.SAVINGS.getForeignKeyColumnNameOnDatatable(), account.productId());
 
         final boolean isWithdrawBalance = command.booleanPrimitiveValueOfParameterNamed(withdrawBalanceParamName);
