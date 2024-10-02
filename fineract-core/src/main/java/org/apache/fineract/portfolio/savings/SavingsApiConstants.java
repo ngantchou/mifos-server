@@ -152,7 +152,11 @@ public class SavingsApiConstants {
     public static final String runningBalanceParamName = "runningBalance";
     public static final String reversedParamName = "reversed";
     public static final String dateParamName = "date";
-
+    public static final String depositName = "depositName";
+    public static final String amountInWords = "amountInWords";
+    public static final String note = "note";
+    public static final String sourceOfFunds = "sourceOfFunds";
+    
     // charges parameters
     public static final String chargeIdParamName = "chargeId";
     public static final String chargesParamName = "charges";
