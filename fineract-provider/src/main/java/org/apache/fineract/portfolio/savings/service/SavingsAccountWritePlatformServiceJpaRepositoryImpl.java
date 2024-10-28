@@ -64,6 +64,7 @@ import org.apache.fineract.infrastructure.core.exception.PlatformDataIntegrityEx
 import org.apache.fineract.infrastructure.core.exception.PlatformServiceUnavailableException;
 import org.apache.fineract.infrastructure.core.service.DateUtils;
 import org.apache.fineract.infrastructure.core.service.MathUtil;
+import org.apache.fineract.infrastructure.core.service.SearchParameters;
 import org.apache.fineract.infrastructure.dataqueries.data.EntityTables;
 import org.apache.fineract.infrastructure.dataqueries.data.StatusEnum;
 import org.apache.fineract.infrastructure.dataqueries.service.EntityDatatableChecksWritePlatformService;
@@ -81,6 +82,7 @@ import org.apache.fineract.organisation.office.domain.OfficeRepositoryWrapper;
 import org.apache.fineract.organisation.staff.domain.Staff;
 import org.apache.fineract.organisation.staff.domain.StaffRepository;
 import org.apache.fineract.organisation.staff.domain.StaffRepositoryWrapper;
+import org.apache.fineract.organisation.teller.data.CashierTransactionsWithSummaryData;
 import org.apache.fineract.organisation.teller.domain.Billetage;
 import org.apache.fineract.organisation.teller.domain.BilletageRepository;
 import org.apache.fineract.organisation.teller.domain.Cashier;
@@ -88,6 +90,8 @@ import org.apache.fineract.organisation.teller.domain.CashierRepositoryWrapper;
 import org.apache.fineract.organisation.teller.domain.Teller;
 import org.apache.fineract.organisation.teller.domain.TellerRepositoryWrapper;
 import org.apache.fineract.organisation.teller.domain.TellerStatus;
+import org.apache.fineract.organisation.teller.exception.CashierInsufficientAmountException;
+import org.apache.fineract.organisation.teller.service.TellerManagementReadPlatformService;
 import org.apache.fineract.organisation.workingdays.domain.WorkingDaysRepositoryWrapper;
 import org.apache.fineract.portfolio.account.PortfolioAccountType;
 import org.apache.fineract.portfolio.account.domain.AccountTransferStandingInstruction;
@@ -179,6 +183,7 @@ public class SavingsAccountWritePlatformServiceJpaRepositoryImpl implements Savi
     private final TellerRepositoryWrapper tellerRepositoryWrapper;
     private final OfficeRepositoryWrapper officeRepositoryWrapper;
     private final CashierRepositoryWrapper cashierRepositoryWrapper;
+    private final TellerManagementReadPlatformService tellerManagementReadPlatformService;
 
 
     @Transactional
@@ -292,7 +297,8 @@ public class SavingsAccountWritePlatformServiceJpaRepositoryImpl implements Savi
     @Override
     public CommandProcessingResult deposit(final Long savingsId, final JsonCommand command) {
         final AppUser currentUser = this.context.authenticatedUser();
-        final Teller teller = validateUserPriviledgeOnTellerAndRetrieve(currentUser); 
+        final Cashier cashier = validateUserPriviledgeOnTellerAndRetrieve(currentUser); 
+        final Teller teller = cashier.getTeller();
         this.savingsAccountTransactionDataValidator.validate(command);
         boolean isGsim = false;
 
@@ -356,14 +362,42 @@ public class SavingsAccountWritePlatformServiceJpaRepositoryImpl implements Savi
             this.billetageRepository.saveAll(billetages);
         }
 
+        // Create receipt data
+        Map<String, Object> receiptData = new HashMap<>();
+        receiptData.put("receiptNumber", deposit.getId());
+        receiptData.put("date", transactionDate);
+        receiptData.put("time", transactionDate);
+        
+        Map<String, Object> agency = new HashMap<>();
+        agency.put("name", account.office().getName());
+        agency.put("cashierNumber", teller.getId());
+        agency.put("accountNumber", account.getAccountNumber());
+        agency.put("clientName", account.getClient().getDisplayName());
+        agency.put("agencyCode", account.office().getExternalId());
+        agency.put("amount", transactionAmount);
+        agency.put("taxes", 0);
+        agency.put("stamp", 0);
+        agency.put("depositorName", depositName);
+        receiptData.put("agency", agency);
+        
+        Map<String, Object> transaction = new HashMap<>();
+        transaction.put("cashierName", currentUser.getDisplayName());
+        transaction.put("clientKey", "0");
+        transaction.put("managerCode", account.getClient().getStaff().getFirstname());
+        transaction.put("currency", account.getCurrency().getCode());
+        transaction.put("description", sourceOfFunds);
+        transaction.put("amountInWords", amountInWord);
+        receiptData.put("transaction", transaction);
+        
         return new CommandProcessingResultBuilder() //
-                .withEntityId(deposit.getId()) //
-                .withOfficeId(account.officeId()) //
-                .withClientId(account.clientId()) //
-                .withGroupId(account.groupId()) //
-                .withSavingsId(savingsId) //
-                .with(changes) //
-                .build();
+            .withEntityId(deposit.getId()) //
+            .withOfficeId(account.officeId()) //
+            .withClientId(account.clientId()) //
+            .withGroupId(account.groupId()) //
+            .withSavingsId(savingsId) //
+            .with(changes) //
+            .with(receiptData) //
+            .build();
     }
 
     private Long saveTransactionToGenerateTransactionId(final SavingsAccountTransaction transaction) {
@@ -376,8 +410,9 @@ public class SavingsAccountWritePlatformServiceJpaRepositoryImpl implements Savi
     public CommandProcessingResult withdrawal(final Long savingsId, final JsonCommand command) {
 
         final AppUser currentUser = this.context.authenticatedUser();
-        final Teller teller = validateUserPriviledgeOnTellerAndRetrieve(currentUser); 
-        
+        final Cashier cashier = validateUserPriviledgeOnTellerAndRetrieve(currentUser); 
+        final Teller teller = cashier.getTeller();
+
         this.savingsAccountTransactionDataValidator.validate(command);
 
         boolean isGsim = false;
@@ -401,7 +436,8 @@ public class SavingsAccountWritePlatformServiceJpaRepositoryImpl implements Savi
         checkClientOrGroupActive(account);
 
         this.savingsAccountTransactionDataValidator.validateTransactionWithPivotDate(transactionDate, account);
-
+        
+        
         final boolean isAccountTransfer = false;
         final boolean isRegularTransaction = true;
         final boolean isApplyWithdrawFee = true;
@@ -431,15 +467,42 @@ public class SavingsAccountWritePlatformServiceJpaRepositoryImpl implements Savi
         if(billetages.size() > 0){
             this.billetageRepository.saveAll(billetages);
         }
-
+        // Create receipt data
+        Map<String, Object> receiptData = new HashMap<>();
+        receiptData.put("receiptNumber", withdrawal.getId());
+        receiptData.put("date", transactionDate);
+        receiptData.put("time", transactionDate);
+        
+        Map<String, Object> agency = new HashMap<>();
+        agency.put("name", account.office().getName());
+        agency.put("cashierNumber", teller.getId());
+        agency.put("accountNumber", account.getAccountNumber());
+        agency.put("clientName", account.getClient().getDisplayName());
+        agency.put("agencyCode", account.office().getExternalId());
+        agency.put("amount", transactionAmount);
+        agency.put("taxes", 0);
+        agency.put("stamp", 0);
+        agency.put("depositorName", "-");
+        receiptData.put("agency", agency);
+        
+        Map<String, Object> transaction = new HashMap<>();
+        transaction.put("cashierName", currentUser.getDisplayName());
+        transaction.put("clientKey", "0");
+        transaction.put("managerCode", account.getClient().getStaff().getFirstname());
+        transaction.put("currency", account.getCurrency().getCode());
+        transaction.put("description", noteText);
+        transaction.put("amountInWords", "-");
+        receiptData.put("transaction", transaction);
+        
         return new CommandProcessingResultBuilder() //
-                .withEntityId(withdrawal.getId()) //
-                .withOfficeId(account.officeId()) //
-                .withClientId(account.clientId()) //
-                .withGroupId(account.groupId()) //
-                .withSavingsId(savingsId) //
-                .with(changes)//
-                .build();
+            .withEntityId(withdrawal.getId()) //
+            .withOfficeId(account.officeId()) //
+            .withClientId(account.clientId()) //
+            .withGroupId(account.groupId()) //
+            .withSavingsId(savingsId) //
+            .with(changes) //
+            .with(receiptData) //
+            .build();
     }
 
     @Transactional
@@ -1945,7 +2008,7 @@ public class SavingsAccountWritePlatformServiceJpaRepositoryImpl implements Savi
             throw new PlatformDataIntegrityException("Reason For Block is Mandatory", "error.msg.reason.for.block.mandatory");
         }
     }
-    private Teller validateUserPriviledgeOnTellerAndRetrieve(final AppUser currentUser) {
+    private Cashier validateUserPriviledgeOnTellerAndRetrieve(final AppUser currentUser) {
 
         final Long userOfficeId = currentUser.getOffice().getId();
         final Office userOffice = this.officeRepositoryWrapper.findOfficeHierarchy(userOfficeId);
@@ -1957,6 +2020,8 @@ public class SavingsAccountWritePlatformServiceJpaRepositoryImpl implements Savi
         if (tellerToReturn.getStatus().equals(TellerStatus.INACTIVE.getValue())) {
             throw new NoAuthorizationException("Les transactions ne sont pas autorisées, La caisse est inactive.");
         }
-        return tellerToReturn;
+        return cashierToReturn;
     }
+
+
 }

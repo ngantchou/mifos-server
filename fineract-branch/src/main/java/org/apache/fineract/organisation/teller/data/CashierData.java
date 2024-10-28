@@ -19,6 +19,7 @@
 package org.apache.fineract.organisation.teller.data;
 
 import java.io.Serializable;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Collection;
 import lombok.AllArgsConstructor;
@@ -26,6 +27,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
 import org.apache.fineract.organisation.staff.data.StaffData;
+import org.apache.fineract.organisation.teller.domain.CashierSession;
 
 /**
  * Represents a cashier, providing access to the cashier's office, staff information, teller, and more.
@@ -57,7 +59,12 @@ public final class CashierData implements Serializable {
     private String officeName;
     private String tellerName;
     private String staffName;
+    private BigDecimal CurrentAmount;
+    private BigDecimal OpeningAmount;
+    private BigDecimal ClosingAmount;
+    private String tellerStatus;
     private Collection<StaffData> staffOptions;
+    private CashierSession cashierSessions;
 
     /**
      * Creates a new cashier.
@@ -98,18 +105,18 @@ public final class CashierData implements Serializable {
      */
     public static CashierData instance(final Long id, final Long officeId, String officeName, final Long staffId, final String staffName,
             final Long tellerId, final String tellerName, final String description, final LocalDate startDate, final LocalDate endDate,
-            final Boolean isFullDay, final String startTime, final String endTime) {
+            final Boolean isFullDay, final String startTime, final String endTime, final BigDecimal currentAmount) {
         return new CashierData().setId(id).setOfficeId(officeId).setOfficeName(officeName).setStaffId(staffId).setStaffName(staffName)
                 .setTellerId(tellerId).setTellerName(tellerName).setDescription(description).setStartDate(startDate).setEndDate(endDate)
-                .setIsFullDay(isFullDay).setStartTime(startTime).setEndTime(endTime);
+                .setIsFullDay(isFullDay).setStartTime(startTime).setEndTime(endTime).setCurrentAmount(currentAmount);
     }
 
     /*
      * Creates a new cashier.
      */
     public static CashierData template(final Long officeId, final String officeName, final Long tellerId, final String tellerName,
-            final Collection<StaffData> staffOptions) {
+            final Collection<StaffData> staffOptions, final BigDecimal currentAmount) {
         return new CashierData().setOfficeId(officeId).setOfficeName(officeName).setTellerId(tellerId).setTellerName(tellerName)
-                .setStaffOptions(staffOptions);
+                .setStaffOptions(staffOptions).setCurrentAmount(currentAmount);
     }
 }

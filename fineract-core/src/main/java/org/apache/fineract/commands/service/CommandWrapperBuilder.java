@@ -2840,6 +2840,16 @@ public class CommandWrapperBuilder {
         this.href = "/tellers/" + tellerId + "/cashiers/" + cashierId + "/close";
         return this;
     }
+
+    public CommandWrapperBuilder transfertCashierAmount(Long tellerId, Long cashierSourceId) {
+        this.actionName = "TRANSFERTCASHIERAMOUNT";
+        this.entityName = "CASHIER";
+        this.entityId = tellerId;
+        this.subentityId = cashierSourceId;
+        this.href = "/tellers/" + tellerId + "/cashiers/" + cashierSourceId + "/transfert";
+        return this;
+    }
+
     public CommandWrapperBuilder deleteRole(Long roleId) {
         this.actionName = "DELETE";
         this.entityName = "ROLE";

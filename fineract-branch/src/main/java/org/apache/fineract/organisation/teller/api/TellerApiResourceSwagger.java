@@ -565,7 +565,9 @@ final class TellerApiResourceSwagger {
 
         @Schema(description = "Closing amount", example = "800")
         public Double closingAmount;
-
+        
+        @Schema(description = "Opening amount", example = "1000")
+        public Double openingAmount;
         //@Schema(description = "Billetage details", example = "[{'denomination': 100, 'quantity': 8}]")
         public Set<BilletageCloseDataRequest> billetage;
 
@@ -578,6 +580,44 @@ final class TellerApiResourceSwagger {
         public LocalDate endDate;
         @Schema(example = "12:00:00 AM")
         public String endTime;
+    }
+
+    @Schema(description = "PostTellersTellerIdCashiersCashierIdTransfertRequest")
+    public static final class PostTellersTellerIdCashiersCashierIdTransfertRequest {
+
+        private PostTellersTellerIdCashiersCashierIdTransfertRequest() {
+
+        }
+
+        public  class BilletageCloseDataRequest {
+            
+            private BilletageCloseDataRequest(){}
+
+            @Schema(description = "Denomination of the currency", example = "100.00")
+            private Double denomination;
+
+            @Schema(description = "Quantity of the denomination", example = "5")
+            private Integer quantity;
+            // Difference between the cashier and teller counts
+        }
+
+        @Schema(example = "USD")
+        public String currencyCode;
+        @Schema(example = "2000")
+        public BigDecimal txnAmount;
+        @Schema(example = "cash settlement")
+        public String txnNote;
+        @Schema(example = "en")
+        public String locale;
+        @Schema(example = "dd-MM-yyyy")
+        public String dateFormat;
+        @Schema(example = "[2015, 02, 20]")
+        public LocalDate txnDate;
+        @Schema(example = "1")
+        public Long destinationCashierId;
+        public Set<BilletageCloseDataRequest> billetage;
+        @Schema(example = "2")
+        public Long sourceCashierId;
     }
 
     // Response for closing a cashier session

@@ -169,7 +169,13 @@ public class TellerWritePlatformServiceJpaImpl implements TellerWritePlatformSer
         }
         return tellerToReturn;
     }
+    private Teller validateTellerStatus(final Teller tellerToReturn) {
 
+        if (tellerToReturn.getStatus().equals(TellerStatus.INACTIVE.getValue())) {
+            throw new NoAuthorizationException("Les transactions ne sont pas autorisées, La caisse est inactive.");
+        }
+        return tellerToReturn;
+    }
     @Override
     @Transactional
     public CommandProcessingResult deleteTeller(Long tellerId) {
@@ -276,7 +282,7 @@ public class TellerWritePlatformServiceJpaImpl implements TellerWritePlatformSer
             final Staff staff = this.staffRepository.findById(staffId).orElseThrow(() -> new StaffNotFoundException(staffId));
 
             final Cashier cashier = validateUserPriviledgeOnCashierAndRetrieve(currentUser, tellerId, cashierId);
-
+         
             cashier.setStaff(staff);
 
             // TODO - check if staff office and teller office match
@@ -364,33 +370,9 @@ public class TellerWritePlatformServiceJpaImpl implements TellerWritePlatformSer
             final AppUser currentUser = this.context.authenticatedUser();
 
             final Cashier cashier = this.cashierRepository.findById(cashierId).orElseThrow(() -> new CashierNotFoundException(cashierId));
-
+            validateTellerStatus(cashier.getTeller());
             this.fromApiJsonDeserializer.validateForCashTxnForCashier(command.json());
 
-            // TODO: can we please remove this whole block?!? this is 20 lines of dead code!!!
-            final String entityType = command.stringValueOfParameterNamed("entityType");
-            if (entityType != null) {
-                if (entityType.equals("loan account")) {
-                    // TODO : Check if loan account exists
-                    // LoanAccount loan = null;
-                    // if (loan == null) { throw new
-                    // LoanAccountFoundException(entityId); }
-                } else if (entityType.equals("savings account")) {
-                    // TODO : Check if loan account exists
-                    // SavingsAccount savingsaccount = null;
-                    // if (savingsaccount == null) { throw new
-                    // SavingsAccountNotFoundException(entityId); }
-
-                }
-                if (entityType.equals("client")) {
-                    // TODO: Check if client exists
-                    // Client client = null;
-                    // if (client == null) { throw new
-                    // ClientNotFoundException(entityId); }
-                } else {
-                    // TODO : Invalid type handling
-                }
-            }
 
             final CashierTransaction cashierTxn = CashierTransaction.fromJson(cashier, command);
             cashierTxn.setTxnType(txnType.getId());
@@ -496,7 +478,7 @@ public class TellerWritePlatformServiceJpaImpl implements TellerWritePlatformSer
         //this.cashierSessionValidator.validateForClosingSession(command);
         final AppUser currentUser = this.context.authenticatedUser();
         final Teller teller = validateUserPriviledgeOnTellerAndRetrieve(currentUser, tellerId); 
-        
+        validateTellerStatus(teller);
         final Cashier cashier = this.cashierRepository.findById(cashierId).orElseThrow(() -> new CashierNotFoundException(cashierId));  
         // Create and save a new cashier session
         CashierSession cashierSession = CashierSession.fromJson(cashier, command);
@@ -523,4 +505,21 @@ public class TellerWritePlatformServiceJpaImpl implements TellerWritePlatformSer
                 .build();
     }
 
+    @Override
+    public CommandProcessingResult transfertCashierAmount(Long tellerId, Long cashierSourceId,Long cashierDestinationId, JsonCommand command) {
+        
+        this.cashierTransactionDataValidator.validateSettleCashAndCashOutTransactions(cashierSourceId, command);
+
+         final String sourceId = command.stringValueOfParameterNamed("sourceCashierId");
+         final String destinationId = command.stringValueOfParameterNamed("destinationCashierId");
+
+         doTransactionForCashier(Long.parseLong(sourceId), CashierTxnType.SETTLE, command); 
+
+         doTransactionForCashier(Long.parseLong(destinationId), CashierTxnType.ALLOCATE, command);
+
+        return new CommandProcessingResultBuilder()
+                .withCommandId(command.commandId())
+                .withEntityId(cashierSourceId)
+                .build();     
+    }
 }

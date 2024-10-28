@@ -16,12 +16,11 @@ import lombok.experimental.Accessors;
 @AllArgsConstructor
 @Accessors(chain = true)
 public final class BilletageOpenData implements Serializable{
+    private Integer count;
+    private Integer tellerCount;
+    private Integer cashierCount;
+    private Integer difference;
+    private Integer status;
 
-    @Schema(description = "Denomination of the currency", example = "100.00")
-    private Double denomination;
-
-    @Schema(description = "Quantity of the denomination", example = "5")
-    private Integer quantity;
-    // Difference between the cashier and teller counts
 }
 

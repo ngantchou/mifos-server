@@ -34,6 +34,7 @@ import org.apache.fineract.infrastructure.core.data.CommandProcessingResultBuild
 import org.apache.fineract.infrastructure.core.domain.JdbcSupport;
 import org.apache.fineract.infrastructure.core.exception.PlatformDataIntegrityException;
 import org.apache.fineract.infrastructure.core.exception.UnrecognizedQueryParamException;
+import org.apache.fineract.infrastructure.core.service.MathUtil;
 import org.apache.fineract.infrastructure.core.service.Page;
 import org.apache.fineract.infrastructure.core.service.PaginationHelper;
 import org.apache.fineract.infrastructure.core.service.SearchParameters;
@@ -62,6 +63,7 @@ import org.apache.fineract.organisation.teller.domain.CashierTxnType;
 import org.apache.fineract.organisation.teller.domain.TellerRepositoryWrapper;
 import org.apache.fineract.organisation.teller.domain.TellerStatus;
 import org.apache.fineract.organisation.teller.exception.TellerNotFoundException;
+import org.apache.fineract.organisation.teller.exception.CashierInsufficientAmountException;
 import org.apache.fineract.organisation.teller.exception.CashierNotFoundException;
 import org.apache.fineract.useradministration.domain.AppUser;
 import org.springframework.cache.annotation.Cacheable;
@@ -85,6 +87,7 @@ public class TellerManagementReadPlatformServiceImpl implements TellerManagement
     private final CashierRepository cashierRepository;
     private final TellerRepositoryWrapper tellerRepositoryWrapper;
     private final CashierSessionRepository cashierSessionRepository;
+
 
     private static final class TellerMapper implements RowMapper<TellerData> {
 
@@ -305,8 +308,13 @@ public class TellerManagementReadPlatformServiceImpl implements TellerManagement
         try {
             final CashierMapper cm = new CashierMapper();
             final String sql = "select " + cm.schema() + " where c.id = ?";
+            // this.cashierRepository.findById(cashierId).get().getTeller();
 
-            return this.jdbcTemplate.queryForObject(sql, cm, new Object[] { cashierId }); // NOSONAR
+            //final CashierTransactionsWithSummaryData cashierTxnWithSummary = this.retrieveCashierTransactionsWithSummary(cashierId, false, null, null, "XAF", null);
+           
+            CashierData cashierData =  this.jdbcTemplate.queryForObject(sql, cm, new Object[] { cashierId }); // NOSONAR
+            //cashierData.setCurrentAmount(cashierTxnWithSummary.getNetCash());
+            return cashierData;
         } catch (final EmptyResultDataAccessException e) {
             //throw new StaffNotFoundException(cashierId, e);
             throw new CashierNotFoundException(cashierId, e);
@@ -394,7 +402,7 @@ public class TellerManagementReadPlatformServiceImpl implements TellerManagement
             staffOptions = null;
         }
 
-        return CashierData.template(officeId, officeName, tellerId, tellerName, staffOptions);
+        return CashierData.template(officeId, officeName, tellerId, tellerName, staffOptions, null);
     }
 
     @Override
@@ -646,16 +654,31 @@ public class TellerManagementReadPlatformServiceImpl implements TellerManagement
 
             final StringBuilder sqlBuilder = new StringBuilder(400);
 
-            sqlBuilder.append("c.id as id,c.teller_id as teller_id, t.name as teller_name, c.description as description, ");
-            sqlBuilder.append("c.staff_id as staff_id, s.display_name as staff_name,  ");
-            sqlBuilder.append("c.start_date as start_date, c.end_date as end_date,  ");
-            sqlBuilder.append("c.full_day as full_day, c.start_time as start_time, c.end_time as end_time ");
+            sqlBuilder.append("c.id as id, c.teller_id as teller_id, t.name as teller_name, t.state as teller_status, ");
+            sqlBuilder.append("c.description as description, c.staff_id as staff_id, s.display_name as staff_name, ");
+            sqlBuilder.append("c.start_date as start_date, c.end_date as end_date, cs.id as cs_id, ");
+            sqlBuilder.append("c.full_day as full_day, c.start_time as start_time, c.end_time as end_time, ");
+        
+            // Adding cashier session fields (from m_cashier_sessions)
+            sqlBuilder.append("cs.id as session_id, cs.opening_amount as opening_amount, cs.closing_amount as closing_amount, ");
+            sqlBuilder.append("cs.reconciliation_data as reconciliation_data, cs.start_date as session_start_date, ");
+            sqlBuilder.append("cs.end_date as session_end_date, cs.start_time as session_start_time, ");
+            sqlBuilder.append("cs.end_time as session_end_time, cs.notes as session_notes, cs.status as session_status ");
+        
             sqlBuilder.append("from m_cashiers c ");
             sqlBuilder.append("join m_tellers t on t.id = c.teller_id ");
             sqlBuilder.append("join m_staff s on s.id = c.staff_id ");
+            sqlBuilder.append("left join m_cashier_sessions cs on cs.id = (");
+            sqlBuilder.append("    select id from m_cashier_sessions where cashier_id = c.id ");
+            sqlBuilder.append("    order by start_date desc, id desc limit 1 ");
+            sqlBuilder.append(")");
+        
 
             return sqlBuilder.toString();
         }
+
+        @Cacheable(value = "tellers", key = "T(org.apache.fineract.infrastructure.core.service.ThreadLocalContextUtil).getTenant().getTenantIdentifier().concat(#root.target.context.authenticatedUser().getOffice().getHierarchy()+'of')")
+        
 
         @Override
         public CashierData mapRow(final ResultSet rs, final int rowNum) throws SQLException {
@@ -672,9 +695,34 @@ public class TellerManagementReadPlatformServiceImpl implements TellerManagement
             final Boolean fullDay = rs.getBoolean("full_day");
             final String startTime = rs.getString("start_time");
             final String endTime = rs.getString("end_time");
+            final BigDecimal openAmount = rs.getBigDecimal("opening_amount");
+            final BigDecimal closeAmount = rs.getBigDecimal("closing_amount");
+            final Long sessionId = rs.getLong("session_id");
+            
+            final CashierSession cashierSession = new CashierSession();
+            cashierSession.setId(rs.getLong("cs_id"));
+            cashierSession.setClosingAmount(rs.getBigDecimal("closing_amount"));
+            cashierSession.setEndDate(JdbcSupport.getLocalDate(rs, "session_end_date"));
+            cashierSession.setOpeningAmount(rs.getBigDecimal("opening_amount"));
+            cashierSession.setStartDate(JdbcSupport.getLocalDate(rs, "session_start_date"));
+            cashierSession.setEndTime(JdbcSupport.getLocalTime(rs, "session_start_date"));
+            cashierSession.setStartTime(JdbcSupport.getLocalTime(rs, "session_start_time"));
+            
+            final int status = rs.getInt("teller_status");
+            
 
-            return CashierData.instance(id, null, null, staffId, staffName, tellerId, tellerName, description, startDate, endDate, fullDay,
-                    startTime, endTime);
+            CashierData cashierdata = CashierData.instance(id, null, null, staffId, staffName, tellerId, tellerName, description, startDate, endDate, fullDay,
+                    startTime, endTime, null);
+            cashierdata.setCashierSessions(cashierSession);
+
+            if (openAmount != null) {
+                cashierdata.setOpeningAmount(openAmount);
+            }
+            if (closeAmount != null) {
+                cashierdata.setClosingAmount(closeAmount);
+            }
+            cashierdata.setTellerStatus(TellerStatus.fromInt(status).name());
+            return cashierdata;
         }
     }
 

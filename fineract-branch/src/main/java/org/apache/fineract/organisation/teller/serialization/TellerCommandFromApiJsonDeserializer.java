@@ -69,12 +69,15 @@ public final class TellerCommandFromApiJsonDeserializer {
     public static final String TXN_DATE = "txnDate";
     public static final String TXN_NOTE = "txnNote";
     public static final String TELLER = "teller";
+    public static final String SOURCE_CASHIER_ID = "sourceCashierId";
+    public static final String DESTINATION_CASHIER_ID = "destinationCashierId";
+    public static final String BILLETAGE = "billetage";
     /**
      * The parameters supported for this command.
      */
     private static final Set<String> SUPPORTED_PARAMETERS = new HashSet<>(Arrays.asList(OFFICE_ID, NAME, DESCRIPTION, START_DATE, END_DATE,
             STATUS, DATE_FORMAT, LOCALE, IS_FULL_DAY, STAFF_ID, HOUR_START_TIME, MIN_START_TIME, HOUR_END_TIME, MIN_END_TIME, TXN_AMOUNT,
-            TXN_DATE, TXN_NOTE, ENTITY_TYPE, ENTITY_ID, CURRENCY_CODE));
+            TXN_DATE, TXN_NOTE, ENTITY_TYPE, ENTITY_ID, CURRENCY_CODE, SOURCE_CASHIER_ID,DESTINATION_CASHIER_ID,BILLETAGE));
     private final FromJsonHelper fromApiJsonHelper;
 
     @Autowired
@@ -200,6 +203,7 @@ public final class TellerCommandFromApiJsonDeserializer {
         final String currencyCode = this.fromApiJsonHelper.extractStringNamed(CURRENCY_CODE, element);
         baseDataValidator.reset().parameter(CURRENCY_CODE).value(currencyCode).notExceedingLengthOf(3);
     }
+
     public void validateForOpeningSession(JsonCommand command) {
         final BigDecimal openingAmount = command.bigDecimalValueOfParameterNamed("openingAmount");
         if (openingAmount == null || openingAmount.compareTo(BigDecimal.ZERO) <= 0) {

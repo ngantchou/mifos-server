@@ -507,7 +507,30 @@ public class TellerApiResource {
 
         return this.jsonSerializer.serialize(result);
     }
+    /**
+     * API to make a cashier transaction, including billetage.
+     */
+    @POST
+    @Path("{tellerId}/cashiers/{cashierId}/destination/{cashierDestinationId}/transfert")
+    @Consumes({ MediaType.TEXT_HTML, MediaType.APPLICATION_JSON })
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(summary = "Transaction Cashier Session", description = "Transaction a cashier session, recording billetage (denominations and counts).")
+    @RequestBody(required = true, content = @Content(schema = @Schema(implementation = TellerApiResourceSwagger.PostTellersTellerIdCashiersCashierIdTransfertRequest.class)))
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "OK", content = @Content(schema = @Schema(implementation = CommandProcessingResult.class))) })
+    public String transfertInterCashier(@PathParam("tellerId") @Parameter(description = "Teller ID") final Long tellerId,
+    @PathParam("cashierId") @Parameter(description = "Cashier ID") final Long cashierId,
+                                      @Parameter(hidden = true) final String cashierTxnData) {
+ 
+        final CommandWrapper request = new CommandWrapperBuilder()
+            .transfertCashierAmount(tellerId, cashierId)
+            .withJson(cashierTxnData)  // This JSON should include billetage data
+            .build();
 
+        final CommandProcessingResult result = this.commandWritePlatformService.logCommandSource(request);
+
+        return this.jsonSerializer.serialize(result);
+    }
 
     private static final class CashiersForTeller {
 

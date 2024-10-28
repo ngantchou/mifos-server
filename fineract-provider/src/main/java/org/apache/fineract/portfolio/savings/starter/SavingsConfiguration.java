@@ -46,6 +46,7 @@ import org.apache.fineract.organisation.staff.service.StaffReadPlatformService;
 import org.apache.fineract.organisation.teller.domain.BilletageRepository;
 import org.apache.fineract.organisation.teller.domain.CashierRepositoryWrapper;
 import org.apache.fineract.organisation.teller.domain.TellerRepositoryWrapper;
+import org.apache.fineract.organisation.teller.service.TellerManagementReadPlatformService;
 import org.apache.fineract.organisation.workingdays.domain.WorkingDaysRepositoryWrapper;
 import org.apache.fineract.portfolio.account.domain.AccountAssociationsRepository;
 import org.apache.fineract.portfolio.account.domain.StandingInstructionRepository;
@@ -369,7 +370,9 @@ public class SavingsConfiguration {
             EntityDatatableChecksWritePlatformService entityDatatableChecksWritePlatformService, AppUserRepositoryWrapper appuserRepository,
             StandingInstructionRepository standingInstructionRepository, BusinessEventNotifierService businessEventNotifierService,
             GSIMRepositoy gsimRepository, SavingsAccountInterestPostingService savingsAccountInterestPostingService,
-            ErrorHandler errorHandler,BilletageRepository billetageRepository,TellerRepositoryWrapper tellerRepositoryWrapper,OfficeRepositoryWrapper officeRepositoryWrapper,CashierRepositoryWrapper cashierRepositoryWrapper) {
+            ErrorHandler errorHandler,BilletageRepository billetageRepository,TellerRepositoryWrapper tellerRepositoryWrapper,
+            OfficeRepositoryWrapper officeRepositoryWrapper,CashierRepositoryWrapper cashierRepositoryWrapper,
+            TellerManagementReadPlatformService tellerManagementReadPlatformService) {
         return new SavingsAccountWritePlatformServiceJpaRepositoryImpl(context, fromApiJsonDeserializer, savingAccountRepositoryWrapper,
                 staffRepository, savingsAccountTransactionRepository, savingAccountAssembler, savingsAccountTransactionDataValidator,
                 savingsAccountChargeDataValidator, paymentDetailWritePlatformService, journalEntryWritePlatformService,
@@ -377,7 +380,7 @@ public class SavingsConfiguration {
                 chargeRepository, savingsAccountChargeRepository, holidayRepository, workingDaysRepository, configurationDomainService,
                 depositAccountOnHoldTransactionRepository, entityDatatableChecksWritePlatformService, appuserRepository,
                 standingInstructionRepository, businessEventNotifierService, gsimRepository, savingsAccountInterestPostingService,
-                errorHandler,billetageRepository,tellerRepositoryWrapper,officeRepositoryWrapper,cashierRepositoryWrapper);
+                errorHandler,billetageRepository,tellerRepositoryWrapper,officeRepositoryWrapper,cashierRepositoryWrapper,tellerManagementReadPlatformService);
     }
 
     @Bean
