@@ -47,7 +47,7 @@ import org.springframework.stereotype.Component;
 @AllArgsConstructor
 public class AccountNumberGenerator {
 
-    private static final int maxLength = 9;
+    private static final int maxLength = 6;
 
     private static final String ID = "id";
     private static final String ENTITY_TYPE = "entityType";
@@ -57,6 +57,8 @@ public class AccountNumberGenerator {
     private static final String SAVINGS_PRODUCT_SHORT_NAME = "savingsProductShortName";
     private static final String SHARE_PRODUCT_SHORT_NAME = "sharesProductShortName";
     private static final String PREFIX_SHORT_NAME = "prefixShortName";
+    private static final String KEY = "key";
+    private static final String OFFICE_EXTERNAL_ID = "officeExternalId";
     private final ConfigurationReadPlatformService configurationReadPlatformService;
     private final ClientRepository clientRepository;
     private final LoanRepository loanRepository;
@@ -67,11 +69,12 @@ public class AccountNumberGenerator {
         propertyMap.put(ID, client.getId().toString());
         propertyMap.put(OFFICE_NAME, client.getOffice().getName());
         propertyMap.put(ENTITY_TYPE, "client");
+        //propertyMap.put(OFFICE_EXTERNAL_ID, client.getOffice().getExternalId().getValue());
         CodeValue clientType = client.clientType();
         if (clientType != null) {
             propertyMap.put(CLIENT_TYPE, clientType.getLabel());
         }
-        return generateAccountNumber(propertyMap, accountNumberFormat);
+        return generateClientAccountNumber(propertyMap, accountNumberFormat);
     }
 
     public String generate(Loan loan, AccountNumberFormat accountNumberFormat) {
@@ -80,6 +83,7 @@ public class AccountNumberGenerator {
         propertyMap.put(OFFICE_NAME, loan.getOffice().getName());
         propertyMap.put(LOAN_PRODUCT_SHORT_NAME, loan.loanProduct().getShortName());
         propertyMap.put(ENTITY_TYPE, "loan");
+        propertyMap.put(OFFICE_EXTERNAL_ID, loan.getOffice().getExternalId().getValue());
         return generateAccountNumber(propertyMap, accountNumberFormat);
     }
 
@@ -89,6 +93,7 @@ public class AccountNumberGenerator {
         propertyMap.put(OFFICE_NAME, savingsAccount.office().getName());
         propertyMap.put(SAVINGS_PRODUCT_SHORT_NAME, savingsAccount.savingsProduct().getShortName());
         propertyMap.put(ENTITY_TYPE, "savingsAccount");
+        propertyMap.put(OFFICE_EXTERNAL_ID, savingsAccount.office().getExternalId().getValue());
         return generateAccountNumber(propertyMap, accountNumberFormat);
     }
 
@@ -96,7 +101,8 @@ public class AccountNumberGenerator {
         Map<String, String> propertyMap = new HashMap<>();
         propertyMap.put(ID, shareaccount.getId().toString());
         propertyMap.put(SHARE_PRODUCT_SHORT_NAME, shareaccount.getShareProduct().getShortName());
-        return generateAccountNumber(propertyMap, accountNumberFormat);
+        //propertyMap.put(OFFICE_EXTERNAL_ID, shareaccount.getOffice().getExternalId().getValue());
+        return generateClientAccountNumber(propertyMap, accountNumberFormat);
     }
 
     private String generateAccountNumber(Map<String, String> propertyMap, AccountNumberFormat accountNumberFormat) {
@@ -151,6 +157,15 @@ public class AccountNumberGenerator {
             // FINERACT-590
             // Because account_no is limited to 20 chars, we can only use the
             // first 10 chars of prefix - trim if necessary
+                        // Inclusion de l'ID externe du bureau dans le préfixe
+
+            String officeExternalId = propertyMap.get(OFFICE_EXTERNAL_ID);
+
+            if (officeExternalId != null) {
+
+                prefix = prefix + " " + officeExternalId+" ";
+
+            }
             if (prefix != null) {
                 prefix = prefix.substring(0, Math.min(prefix.length(), 10));
             }
@@ -176,8 +191,168 @@ public class AccountNumberGenerator {
                 accountNumber = generateAccountNumber(propertyMap, accountNumberFormat);
             }
         }
+        // Append the sequential key at the end
+
         return accountNumber;
     }
+    private String generateClientAccountNumber(Map<String, String> propertyMap, AccountNumberFormat accountNumberFormat) {
+
+        int accountMaxLength = AccountNumberGenerator.maxLength;
+
+        String accountNumber = StringUtils.leftPad(propertyMap.get(ID), accountMaxLength, '0');
+
+
+
+        // find if the custom length is defined
+
+        final GlobalConfigurationPropertyData customLength = this.configurationReadPlatformService
+
+                .retrieveGlobalConfiguration("custom-account-number-length");
+
+
+
+        if (customLength.isEnabled()) {
+
+            // if it is enabled, and has the value, get it from the repository.
+
+            if (customLength.getValue() != null) {
+
+                accountMaxLength = customLength.getValue().intValue();
+
+            }
+
+        }
+
+
+
+        final GlobalConfigurationPropertyData randomAccountNumber = this.configurationReadPlatformService
+
+                .retrieveGlobalConfiguration("random-account-number");
+
+
+
+        if (randomAccountNumber.isEnabled()) {
+
+            accountNumber = randomNumberGenerator(accountMaxLength, propertyMap);
+
+        }
+
+
+
+        accountNumber = StringUtils.leftPad(accountNumber, accountMaxLength, '0');
+
+        if (accountNumberFormat != null && accountNumberFormat.getPrefixEnum() != null) {
+
+            AccountNumberPrefixType accountNumberPrefixType = AccountNumberPrefixType.fromInt(accountNumberFormat.getPrefixEnum());
+
+            String prefix = null;
+
+            switch (accountNumberPrefixType) {
+
+                case CLIENT_TYPE:
+
+                    prefix = propertyMap.get(CLIENT_TYPE);
+
+                break;
+
+
+
+                case OFFICE_NAME:
+
+                    prefix = propertyMap.get(OFFICE_NAME);
+
+                break;
+
+
+
+                case LOAN_PRODUCT_SHORT_NAME:
+
+                    prefix = propertyMap.get(LOAN_PRODUCT_SHORT_NAME);
+
+                break;
+
+
+
+                case SAVINGS_PRODUCT_SHORT_NAME:
+
+                    prefix = propertyMap.get(SAVINGS_PRODUCT_SHORT_NAME);
+
+                break;
+
+
+
+                case PREFIX_SHORT_NAME:
+
+                    generatePrefix(propertyMap, propertyMap.get(ID), accountMaxLength, accountNumberFormat);
+
+                    prefix = propertyMap.get(PREFIX_SHORT_NAME);
+
+                break;
+
+            }
+
+
+
+            // FINERACT-590
+
+            // Because account_no is limited to 20 chars, we can only use the
+
+            // first 10 chars of prefix - trim if necessary
+
+            if (prefix != null) {
+
+                prefix = prefix.substring(0, Math.min(prefix.length(), 10));
+
+            }
+
+            if (accountNumberPrefixType.getValue().equals(AccountNumberPrefixType.PREFIX_SHORT_NAME.getValue())) {
+
+                Integer prefixLength = prefix.length();
+
+
+
+                if (randomAccountNumber.isEnabled()) {
+
+                    accountNumber = accountNumber.substring(prefixLength);
+
+                } else {
+
+                    Integer numberLength = accountMaxLength - prefixLength;
+
+                    accountNumber = StringUtils.leftPad(propertyMap.get(ID), numberLength, '0');
+
+                }
+
+            } else {
+
+                accountNumber = StringUtils.leftPad(accountNumber, Integer.valueOf(propertyMap.get(ID).length()), '0');
+
+            }
+
+
+
+            accountNumber = StringUtils.overlay(accountNumber, prefix, 0, 0);
+
+        }
+
+
+
+        if (randomAccountNumber.isEnabled()) { // calling the main function itself until new randomNo.
+
+            Boolean randomNumberConflict = checkAccountNumberConflict(propertyMap, accountNumberFormat, accountNumber);
+
+            if (randomNumberConflict) {
+
+                accountNumber = generateAccountNumber(propertyMap, accountNumberFormat);
+
+            }
+
+        }
+
+        return accountNumber;
+
+    }
+
 
     private String randomNumberGenerator(int accountMaxLength, Map<String, String> propertyMap) {
         String randomNumber = RandomStringUtils.random(accountMaxLength, false, true); // NOSONAR

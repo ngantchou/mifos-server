@@ -381,9 +381,10 @@ public class SavingsAccountWritePlatformServiceJpaRepositoryImpl implements Savi
         receiptData.put("agency", agency);
         
         Map<String, Object> transaction = new HashMap<>();
+        String manager = account.getClient().getStaff() != null ? account.getClient().getStaff().getDisplayName() : "";
         transaction.put("cashierName", currentUser.getDisplayName());
         transaction.put("clientKey", "0");
-        transaction.put("managerCode", account.getClient().getStaff().getFirstname());
+        transaction.put("managerCode", manager);
         transaction.put("currency", account.getCurrency().getCode());
         transaction.put("description", sourceOfFunds);
         transaction.put("amountInWords", amountInWord);
@@ -2023,5 +2024,5 @@ public class SavingsAccountWritePlatformServiceJpaRepositoryImpl implements Savi
         return cashierToReturn;
     }
 
-
+     
 }
